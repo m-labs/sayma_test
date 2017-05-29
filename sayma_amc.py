@@ -152,7 +152,7 @@ _io = [
     ("sfp_tx_disable_n", 1, Pins("AM12"), IOStandard("LVCMOS18")),
 
     # amc_rtm_link
-    ("amc_rtm_link", 1,
+    ("amc_rtm_link", 0,
         Subsignal("clk_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
         Subsignal("clk_n", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
         Subsignal("tx_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
@@ -450,7 +450,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC DRTIO Test Design",
+            ident="Sayma AMC RTM Link Test Design",
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
