@@ -22,14 +22,17 @@ from litejesd204b.core import LiteJESD204BCoreTXControl
 
 
 _io = [
+    # clock
     ("clk50", 0, Pins("AF9"), IOStandard("LVCMOS18")),
 
+    # serial
     ("serial", 0,
         Subsignal("tx", Pins("AK8")),
         Subsignal("rx", Pins("AL8")),
         IOStandard("LVCMOS18")
     ),
 
+    # sdram
     ("ddram", 0,
         Subsignal("a", Pins(
             "AE17 AL17 AG16 AG17 AD16 AH14 AD15 AK15 AF14 AF15 AL18 AL15 AE18 AJ15 AG14"),
@@ -80,6 +83,7 @@ _io = [
         Subsignal("reset_n", Pins("F14"), IOStandard("LVCMOS15"))
     ),
 
+    # dac
     ("dac_refclk", 0,
         Subsignal("p", Pins("K6")),
         Subsignal("n", Pins("K5")),
@@ -117,6 +121,28 @@ _io = [
         Subsignal("txp", Pins("R4 U4 W4 AA4 AC4 AE4 AG4 AH6")),
         Subsignal("txn", Pins("R3 U3 W3 AA3 AC3 AE3 AG3 AH5"))
     ),
+
+    # sfp
+    ("sfp_tx", 0,
+        Subsignal("p", Pins("AN4")),
+        Subsignal("n", Pins("AN3"))
+    ),
+    ("sfp_rx", 0,
+        Subsignal("p", Pins("AP2")),
+        Subsignal("n", Pins("AP1"))
+    ),
+    ("sfp_tx_disable_n", 0, Pins("AP11"), IOStandard("LVCMOS18")),
+
+    ("sfp_tx", 1,
+        Subsignal("p", Pins("AM6")),
+        Subsignal("n", Pins("AM5"))
+    ),
+    ("sfp_rx", 1,
+        Subsignal("p", Pins("AM2")),
+        Subsignal("n", Pins("AM1"))
+    ),
+    ("sfp_tx_disable_n", 1, Pins("AM12"), IOStandard("LVCMOS18")),
+
 ]
 
 class Platform(XilinxPlatform):
