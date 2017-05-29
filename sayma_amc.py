@@ -311,7 +311,7 @@ def main():
     platform = Platform()
     #soc = SDRAMTestSoC(platform)
     soc = JESDTestSoC(platform)
-    builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
+    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv")
     vns = builder.build()
 
 
