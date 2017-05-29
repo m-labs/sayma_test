@@ -29,7 +29,7 @@ from litex.build.xilinx import XilinxPlatform, VivadoProgrammer
 # - generate a 15.625MHz SYSREF to DAC1
 # - configure the DAC1 (AD9154)
 
-# The design can then be controled over UART to:
+# The design can then be controlled over UART to:
 # - enable/disable JESD TX pattern generation (wb.regs.control_enable.write())
 # - enable/disable JESD STPL test (wb.regs.control_stpl_enable.write())
 # - enable/disable JESD PRBS test (wb.regs.control_prbs_config.write())
