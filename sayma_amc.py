@@ -6,12 +6,19 @@ from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 from litex.build.generic_platform import *
 from litex.build.xilinx import XilinxPlatform
 
+from litex.soc.integration.soc_core import *
 from litex.soc.integration.soc_sdram import *
 from litex.soc.integration.builder import *
 from litex.soc.cores.uart import UARTWishboneBridge
 
 from litedram.modules import MT41J256M16
 from litedram.phy import kusddrphy
+
+from litejesd204b.common import *
+from litejesd204b.phy.gth import GTHQuadPLL
+from litejesd204b.phy import LiteJESD204BPhyTX
+from litejesd204b.core import LiteJESD204BCoreTX
+from litejesd204b.core import LiteJESD204BCoreTXControl
 
 
 _io = [
@@ -186,7 +193,7 @@ class SDRAMTestSoC(SoCSDRAM):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC Test Design",
+            ident="Sayma AMC SDRAM Test Design",
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
@@ -204,9 +211,106 @@ class SDRAMTestSoC(SoCSDRAM):
                             sdram_module.geom_settings,
                             sdram_module.timing_settings)
 
+
+def get_phy_pads(jesd_pads, n):
+    class PHYPads:
+        def __init__(self, txp, txn):
+            self.txp = txp
+            self.txn = txn
+    return PHYPads(jesd_pads.txp[n], jesd_pads.txn[n])
+
+
+class JESDTestSoC(SoCCore):
+    csr_map = {
+        "control": 20
+    }
+    csr_map.update(SoCCore.csr_map)
+
+    def __init__(self, platform, dac=0):
+        clk_freq = int(125e6)
+        SoCCore.__init__(self, platform, clk_freq,
+            cpu_type=None,
+            csr_data_width=32,
+            with_uart=False,
+            ident="Sayma AMC JESD Test Design",
+            with_timer=False
+        )
+        self.submodules.crg = _CRG(platform)
+        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
+                                                  clk_freq, baudrate=115200))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
+
+        self.crg.cd_sys.clk.attr.add("keep")
+        platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
+
+        # jesd
+        ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
+        ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
+        settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
+        linerate = 10e9
+        refclk_freq = 250e6
+
+        self.clock_domains.cd_jesd = ClockDomain()
+        refclk_pads = platform.request("dac_refclk", dac)
+
+        self.refclk = Signal()
+        refclk_to_bufg_gt = Signal()
+        self.specials += [
+            Instance("IBUFDS_GTE3", i_CEB=0,
+                     p_REFCLK_HROW_CK_SEL=0b00,
+                     i_I=refclk_pads.p, i_IB=refclk_pads.n,
+                     o_O=self.refclk, o_ODIV2=refclk_to_bufg_gt),
+            Instance("BUFG_GT", i_I=refclk_to_bufg_gt, o_O=self.cd_jesd.clk)
+        ]
+        platform.add_period_constraint(self.cd_jesd.clk, 1e9/refclk_freq)
+
+        jesd_pads = platform.request("dac_jesd", dac)
+        phys = []
+        for i in range(len(jesd_pads.txp)):
+            if i%4 == 0:
+                qpll = GTHQuadPLL(self.refclk, refclk_freq, linerate)
+                self.submodules += qpll
+                print(qpll)
+
+            phy = LiteJESD204BPhyTX(
+                qpll, get_phy_pads(jesd_pads, i), self.clk_freq,
+                transceiver="gth")
+            #self.comb += phy.transmitter.produce_square_wave.eq(1)
+            platform.add_period_constraint(phy.transmitter.cd_tx.clk, 40*1e9/linerate)
+            platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                self.cd_jesd.clk,
+                phy.transmitter.cd_tx.clk)
+            phys.append(phy)
+        to_jesd = ClockDomainsRenamer("jesd")
+        self.submodules.core = to_jesd(LiteJESD204BCoreTX(phys, settings,
+                                                      converter_data_width=64))
+        self.submodules.control = to_jesd(LiteJESD204BCoreTXControl(self.core))
+        self.core.register_jsync(platform.request("dac_sync", dac))
+
+        # jesd pattern (ramp)
+        data0 = Signal(16)
+        data1 = Signal(16)
+        data2 = Signal(16)
+        data3 = Signal(16)
+        self.sync.jesd += [
+            data0.eq(data0 + 4096),   # freq = dacclk/32
+            data1.eq(data1 + 8192),   # freq = dacclk/16
+            data2.eq(data2 + 16384),  # freq = dacclk/8
+            data3.eq(data3 + 32768)   # freq = dacclk/4
+        ]
+        self.comb += [
+            self.core.sink.converter0.eq(Cat(data0, data0)),
+            self.core.sink.converter1.eq(Cat(data1, data1)),
+            self.core.sink.converter2.eq(Cat(data2, data2)),
+            self.core.sink.converter3.eq(Cat(data3, data3))
+        ]
+
+
 def main():
     platform = Platform()
-    soc = SDRAMTestSoC(platform)
+    #soc = SDRAMTestSoC(platform)
+    soc = JESDTestSoC(platform)
     builder = Builder(soc, output_dir="build", csr_csv="test/csr.csv")
     vns = builder.build()
 
