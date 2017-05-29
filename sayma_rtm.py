@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import sys
+sys.path.append("gateware") # FIXME
+
 from litex.gen import *
 
 from litex.build.generic_platform import *
@@ -8,33 +11,33 @@ from litex.soc.integration.builder import *
 from litex.soc.cores.uart import UARTWishboneBridge
 from litex.soc.cores.spi import SPIMaster
 
-from litex.build.xilinx import XilinxPlatform, VivadoProgrammer
+from litex.build.xilinx import XilinxPlatform
 
-# 10Gbps linerate / 4 lanes / 500Mhz DACCLK / 1x interpolation
-
-# This design targets the sayma rtm and allow AD9154 configuraion over UART
 
 _io = [
+    # clock
     ("clk50", 0, Pins("E15"), IOStandard("LVCMOS25")),
+
+    # serial
     ("serial", 0,
         Subsignal("tx", Pins("B17")),
         Subsignal("rx", Pins("C16")),
         IOStandard("LVCMOS25")
     ),
-]
 
-_rtm_dac1_io = [
-    ("dac1_spi", 0,
+    # dac
+    ("dac_spi", 0,
         Subsignal("clk", Pins("T13")),
         Subsignal("cs_n", Pins("U14")),
         Subsignal("mosi", Pins("V17")),
         Subsignal("miso", Pins("R13")),
         IOStandard("LVCMOS25")
     ),
-    ("dac1_txen", 0, Pins("V16"), IOStandard("LVCMOS25")),
-    ("dac1_txen", 1, Pins("U16"), IOStandard("LVCMOS25")),
-    ("dac1_rst_n", 0, Pins("U15"), IOStandard("LVCMOS25")),
+    ("dac_txen", 0, Pins("V16"), IOStandard("LVCMOS25")),
+    ("dac_txen", 1, Pins("U16"), IOStandard("LVCMOS25")),
+    ("dac_rst_n", 0, Pins("U15"), IOStandard("LVCMOS25")),
 ]
+
 
 class Platform(XilinxPlatform):
     default_clk_name = "clk50"
@@ -43,10 +46,6 @@ class Platform(XilinxPlatform):
     def __init__(self):
         XilinxPlatform.__init__(self, "xc7a15t-csg325-1", _io,
             toolchain="vivado")
-        self.add_extension(_rtm_dac1_io)
-
-    def create_programmer(self):
-        return VivadoProgrammer()
 
 
 class BaseSoC(SoCCore):
@@ -67,29 +66,28 @@ class BaseSoC(SoCCore):
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
 
-class JESDTXConfigSoC(BaseSoC):
+class JESDTestSoC(BaseSoC):
     csr_map = {
         "spi":     20
     }
     csr_map.update(BaseSoC.csr_map)
-    def __init__(self, platform):
+    def __init__(self, platform, dac=0):
         BaseSoC.__init__(self, platform)
 
-        # dac1 spi
-        spi_pads = platform.request("dac1_spi")
+        # dac spi
+        spi_pads = platform.request("dac_spi", dac)
         self.submodules.spi = SPIMaster(spi_pads)
 
-        # dac1 control
+        # dac control
         self.comb += [
-            platform.request("dac1_txen", 0).eq(1),
-            platform.request("dac1_txen", 1).eq(1),
-            platform.request("dac1_rst_n").eq(1)
+            platform.request("dac_txen", dac).eq(1),
+            platform.request("dac_rst_n", dac).eq(1)
         ]
 
 
 def main():
     platform = Platform()
-    soc = JESDTXConfigSoC(platform)
+    soc = JESDTestSoC(platform)
     builder = Builder(soc, output_dir="build_sayma_rtm", csr_csv="test/csr.csv")
     vns = builder.build()
 
