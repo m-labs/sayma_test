@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import sys
+sys.path.append("gateware") # FIXME
 
 from litex.gen import *
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
@@ -19,6 +21,8 @@ from litejesd204b.phy.gth import GTHQuadPLL
 from litejesd204b.phy import LiteJESD204BPhyTX
 from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
+
+from transceiver.gth_ultrascale import GTHChannelPLL, GTH
 
 
 _io = [
@@ -333,10 +337,73 @@ class JESDTestSoC(SoCCore):
         ]
 
 
+class DRTIOTestSoC(SoCCore):
+    def __init__(self, platform, sfp=0, loopback=True):
+        clk_freq = int(125e6)
+        SoCCore.__init__(self, platform, clk_freq,
+            cpu_type=None,
+            csr_data_width=32,
+            with_uart=False,
+            ident="Sayma AMC DRTIO Test Design",
+            with_timer=False
+        )
+        self.submodules.crg = _CRG(platform)
+        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
+                                                  clk_freq, baudrate=115200))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
+
+        self.crg.cd_sys.clk.attr.add("keep")
+        platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
+
+        refclk = Signal()
+        refclk_pads = platform.request("dac_refclk") # FIXME
+        self.specials += [
+            Instance("IBUFDS_GTE3",
+                i_CEB=0,
+                i_I=refclk_pads.p,
+                i_IB=refclk_pads.n,
+                o_O=refclk)
+        ]
+
+        cpll = GTHChannelPLL(refclk, 125e6, 1.25e9)
+        print(cpll)
+        self.submodules += cpll
+
+        self.comb += platform.request("sfp_tx_disable_n", sfp).eq(1)
+        tx_pads = platform.request("sfp_tx", sfp)
+        rx_pads = platform.request("sfp_rx", sfp)
+        gth = GTH(cpll, tx_pads, rx_pads, self.clk_freq,
+            clock_aligner=True, internal_loopback=False)
+        self.submodules += gth
+
+        counter = Signal(32)
+        self.sync.rtio += counter.eq(counter + 1)
+
+        self.comb += [
+            gth.encoder.k[0].eq(1),
+            gth.encoder.d[0].eq((5 << 5) | 28),
+            gth.encoder.k[1].eq(0),
+        ]
+        if loopback:
+            self.comb += gth.encoder.d[1].eq(gth.decoders[1].d)
+        else:
+            self.comb += gth.encoder.d[1].eq(counter[26:])
+
+        gth.cd_rtio.clk.attr.add("keep")
+        gth.cd_rtio_rx.clk.attr.add("keep")
+        platform.add_period_constraint(gth.cd_rtio.clk, 1e9/gth.rtio_clk_freq)
+        platform.add_period_constraint(gth.cd_rtio_rx.clk, 1e9/gth.rtio_clk_freq)
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            gth.cd_rtio.clk,
+            gth.cd_rtio_rx.clk)
+
+
 def main():
     platform = Platform()
     #soc = SDRAMTestSoC(platform)
-    soc = JESDTestSoC(platform)
+    #soc = JESDTestSoC(platform)
+    soc = DRTIOTestSoC(platform)
     builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv")
     vns = builder.build()
 
