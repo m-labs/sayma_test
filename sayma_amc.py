@@ -392,7 +392,7 @@ class DRTIOTestSoC(SoCCore):
         self.submodules += gth
 
         counter = Signal(32)
-        self.sync.rtio += counter.eq(counter + 1)
+        self.sync.tx += counter.eq(counter + 1)
 
         self.comb += [
             gth.encoder.k[0].eq(1),
@@ -404,14 +404,14 @@ class DRTIOTestSoC(SoCCore):
         else:
             self.comb += gth.encoder.d[1].eq(counter[26:])
 
-        gth.cd_rtio.clk.attr.add("keep")
-        gth.cd_rtio_rx.clk.attr.add("keep")
-        platform.add_period_constraint(gth.cd_rtio.clk, 1e9/gth.rtio_clk_freq)
-        platform.add_period_constraint(gth.cd_rtio_rx.clk, 1e9/gth.rtio_clk_freq)
+        gth.cd_tx.clk.attr.add("keep")
+        gth.cd_rx.clk.attr.add("keep")
+        platform.add_period_constraint(gth.cd_tx.clk, 1e9/gth.tx_clk_freq)
+        platform.add_period_constraint(gth.cd_rx.clk, 1e9/gth.tx_clk_freq)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            gth.cd_rtio.clk,
-            gth.cd_rtio_rx.clk)
+            gth.cd_tx.clk,
+            gth.cd_rx.clk)
 
 
 class AMCRTMLinkTestSoC(SoCCore):
@@ -446,20 +446,20 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules.master_serdes = master_serdes = SERDES(
             master_pll, master_pads, mode="master")
 
-        master_serdes.cd_rtio.clk.attr.add("keep")
         master_serdes.cd_serdes.clk.attr.add("keep")
-        master_serdes.cd_serdes_div.clk.attr.add("keep")
-        platform.add_period_constraint(master_serdes.cd_rtio.clk, 16.0),
-        platform.add_period_constraint(master_serdes.cd_serdes.clk, 1.6),
-        platform.add_period_constraint(master_serdes.cd_serdes_div.clk, 6.4)
+        master_serdes.cd_serdes_10x.clk.attr.add("keep")
+        master_serdes.cd_serdes_2p5x.clk.attr.add("keep")
+        platform.add_period_constraint(master_serdes.cd_serdes.clk, 16.0),
+        platform.add_period_constraint(master_serdes.cd_serdes_10x.clk, 1.6),
+        platform.add_period_constraint(master_serdes.cd_serdes_2p5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            master_serdes.cd_rtio.clk,
             master_serdes.cd_serdes.clk,
-            master_serdes.cd_serdes_div.clk)
+            master_serdes.cd_serdes_10x.clk,
+            master_serdes.cd_serdes_2p5x.clk)
 
         counter = Signal(32)
-        self.sync.rtio += counter.eq(counter + 1)
+        self.sync.serdes += counter.eq(counter + 1)
         self.comb += [
             master_serdes.encoder.d[0].eq(counter),
             master_serdes.encoder.d[1].eq(counter)
@@ -469,17 +469,17 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.sync.sys += master_sys_counter.eq(master_sys_counter + 1)
         #self.comb += platform.request("user_led", 0).eq(master_sys_counter[26]) # FIXME
 
-        master_rtio_counter = Signal(32)
-        self.sync.rtio += master_rtio_counter.eq(master_rtio_counter + 1)
-        #self.comb += platform.request("user_led", 1).eq(master_rtio_counter[26]) # FIXME
-
-        master_serdes_div_counter = Signal(32)
-        self.sync.serdes_div += master_serdes_div_counter.eq(master_serdes_div_counter + 1)
-        #self.comb += platform.request("user_led", 2).eq(master_serdes_div_counter[26]) # FIXME
-
         master_serdes_counter = Signal(32)
         self.sync.serdes += master_serdes_counter.eq(master_serdes_counter + 1)
-        #self.comb += platform.request("user_led", 3).eq(master_serdes_counter[26]) # FIXME
+        #self.comb += platform.request("user_led", 1).eq(master_serdes_counter[26]) # FIXME
+
+        master_serdes_2p5x_counter = Signal(32)
+        self.sync.serdes_2p5x += master_serdes_2p5x_counter.eq(master_serdes_2p5x_counter + 1)
+        #self.comb += platform.request("user_led", 2).eq(master_serdes_2p5x_counter[26]) # FIXME
+
+        master_serdes_10x_counter = Signal(32)
+        self.sync.serdes_10x += master_serdes_10x_counter.eq(master_serdes_10x_counter + 1)
+        #self.comb += platform.request("user_led", 3).eq(master_serdes_10x_counter[26]) # FIXME
 
         analyzer_signals = [
             master_serdes.encoder.k[0],
@@ -496,7 +496,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             master_serdes.decoders[1].d,
             master_serdes.decoders[1].k
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="rtio")
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):

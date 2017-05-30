@@ -1,6 +1,7 @@
 from litex.gen import *
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.soc.interconnect.csr import *
 from litex.soc.cores.code_8b10b import Encoder, Decoder
 
 from transceiver.gth_ultrascale_init import GTHInit
@@ -71,17 +72,23 @@ CLKIN +----> /M  +-->       Charge Pump         +-> VCO +---> CLKOUT
         return r
 
 
-class GTH(Module):
+class GTH(Module, AutoCSR):
     def __init__(self, cpll, tx_pads, rx_pads, sys_clk_freq,
                  clock_aligner=True, internal_loopback=False,
                  tx_polarity=0, rx_polarity=0):
-        self.tx_produce_square_wave = Signal()
+        self.tx_produce_square_wave = CSRStorage()
+        self.tx_prbs_config = CSRStorage(2)
+
+        self.rx_prbs_config = CSRStorage(2)
+        self.rx_prbs_errors = CSRStatus(32)
+
+        self.rx_bitslip_value = CSRStorage(5)
 
         # # #
 
-        self.submodules.encoder = ClockDomainsRenamer("rtio")(
+        self.submodules.encoder = ClockDomainsRenamer("tx")(
             Encoder(2, True))
-        self.decoders = [ClockDomainsRenamer("rtio_rx")(
+        self.decoders = [ClockDomainsRenamer("rx")(
             Decoder(True)) for _ in range(2)]
         self.submodules += self.decoders
 
@@ -92,15 +99,36 @@ class GTH(Module):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.rtio_clk_freq = cpll.config["linerate"]/20
+        self.tx_clk_freq = cpll.config["linerate"]/20
+
+        # control/status cdc
+        tx_produce_square_wave = Signal()
+        tx_prbs_config = Signal(2)
+
+        rx_prbs_config = Signal(2)
+        rx_prbs_errors = Signal(32)
+
+        rx_bitslip_value = Signal(5)
+
+        self.specials += [
+            MultiReg(self.tx_produce_square_wave.storage, tx_produce_square_wave, "tx"),
+            MultiReg(self.tx_prbs_config.storage, tx_prbs_config, "tx"),
+        ]
+
+        self.specials += [
+            MultiReg(self.rx_prbs_config.storage, rx_prbs_config, "rx"),
+            MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys"), # FIXME
+        ]
+
+        self.specials += MultiReg(self.rx_bitslip_value.storage, rx_bitslip_value, "rx")
 
         # # #
 
         # TX generates RTIO clock, init must be in system domain
         tx_init = GTHInit(sys_clk_freq, False)
         # RX receives restart commands from RTIO domain
-        rx_init = ClockDomainsRenamer("rtio")(
-            GTHInit(self.rtio_clk_freq, True))
+        rx_init = ClockDomainsRenamer("tx")(
+            GTHInit(self.tx_clk_freq, True))
         self.submodules += tx_init, rx_init
         self.comb += [
             tx_init.plllock.eq(cpll.lock),
@@ -178,8 +206,8 @@ class GTH(Module):
                 i_TXCTRL0=Cat(txdata[8], txdata[18]),
                 i_TXCTRL1=Cat(txdata[9], txdata[19]),
                 i_TXDATA=Cat(txdata[:8], txdata[10:18]),
-                i_TXUSRCLK=ClockSignal("rtio"),
-                i_TXUSRCLK2=ClockSignal("rtio"),
+                i_TXUSRCLK=ClockSignal("tx"),
+                i_TXUSRCLK2=ClockSignal("tx"),
 
                 # TX electrical
                 i_TXPD=0b00,
@@ -217,8 +245,8 @@ class GTH(Module):
                 i_RXOUTCLKSEL=0b010,
                 i_RXPLLCLKSEL=0b00,
                 o_RXOUTCLK=self.rxoutclk,
-                i_RXUSRCLK=ClockSignal("rtio_rx"),
-                i_RXUSRCLK2=ClockSignal("rtio_rx"),
+                i_RXUSRCLK=ClockSignal("rx"),
+                i_RXUSRCLK2=ClockSignal("rx"),
 
                 # RX Clock Correction Attributes
                 p_CLK_CORRECT_USE="FALSE",
@@ -254,30 +282,31 @@ class GTH(Module):
         tx_reset_deglitched = Signal()
         tx_reset_deglitched.attr.add("no_retiming")
         self.sync += tx_reset_deglitched.eq(~tx_init.done)
-        self.clock_domains.cd_rtio = ClockDomain()
-        tx_bufg_div = cpll.config["clkin"]/self.rtio_clk_freq
+        self.clock_domains.cd_tx = ClockDomain()
+        tx_bufg_div = cpll.config["clkin"]/self.tx_clk_freq
         assert tx_bufg_div == int(tx_bufg_div)
         self.specials += [
-            Instance("BUFG_GT", i_I=self.txoutclk, o_O=self.cd_rtio.clk,
+            Instance("BUFG_GT", i_I=self.txoutclk, o_O=self.cd_tx.clk,
                 i_DIV=int(tx_bufg_div)-1),
-            AsyncResetSynchronizer(self.cd_rtio, tx_reset_deglitched)
+            AsyncResetSynchronizer(self.cd_tx, tx_reset_deglitched)
         ]
 
         # rx clocking
         rx_reset_deglitched = Signal()
         rx_reset_deglitched.attr.add("no_retiming")
-        self.sync.rtio += rx_reset_deglitched.eq(~rx_init.done)
-        self.clock_domains.cd_rtio_rx = ClockDomain()
+        self.sync.tx += rx_reset_deglitched.eq(~rx_init.done)
+        self.clock_domains.cd_rx = ClockDomain()
         self.specials += [
-            Instance("BUFG_GT", i_I=self.rxoutclk, o_O=self.cd_rtio_rx.clk),
-            AsyncResetSynchronizer(self.cd_rtio_rx, rx_reset_deglitched)
+            Instance("BUFG_GT", i_I=self.rxoutclk, o_O=self.cd_rx.clk),
+            AsyncResetSynchronizer(self.cd_rx, rx_reset_deglitched)
         ]
 
         # tx data and prbs
-        self.submodules.tx_prbs = ClockDomainsRenamer("rtio")(PRBSTX(20, True))
+        self.submodules.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(20, True))
+        self.comb += self.tx_prbs.config.eq(tx_prbs_config)
         self.comb += [
             self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(2)])),
-            If(self.tx_produce_square_wave,
+            If(tx_produce_square_wave,
                 # square wave @ linerate/20 for scope observation
                 txdata.eq(0b11111111110000000000)
             ).Else(
@@ -286,7 +315,11 @@ class GTH(Module):
         ]
 
         # rx data and prbs
-        self.submodules.rx_prbs = ClockDomainsRenamer("rtio_rx")(PRBSRX(20, True))
+        self.submodules.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(20, True))
+        self.comb += [
+            self.rx_prbs.config.eq(rx_prbs_config),
+            rx_prbs_errors.eq(self.rx_prbs.errors)
+        ]
         self.comb += [
             self.decoders[0].input.eq(rxdata[:10]),
             self.decoders[1].input.eq(rxdata[10:]),
@@ -295,7 +328,7 @@ class GTH(Module):
 
         # clock alignment
         if clock_aligner:
-            clock_aligner = BruteforceClockAligner(0b0101111100, self.rtio_clk_freq)
+            clock_aligner = BruteforceClockAligner(0b0101111100, self.tx_clk_freq)
             self.submodules += clock_aligner
             self.comb += [
                 clock_aligner.rxdata.eq(rxdata),
@@ -306,7 +339,6 @@ class GTH(Module):
             self.comb += self.rx_ready.eq(rx_init.done)
 
 # TODO:
-# - expose prbs?
 # - do something specific for rx clocks?
 class MultiGTH(Module):
     def __init__(self, cpll, tx_pads, rx_pads, sys_clk_freq, **kwargs):

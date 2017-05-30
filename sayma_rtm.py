@@ -130,20 +130,20 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules.slave_serdes = slave_serdes = SERDES(
             slave_pll, slave_pads, mode="slave")
 
-        slave_serdes.cd_rtio.clk.attr.add("keep")
         slave_serdes.cd_serdes.clk.attr.add("keep")
-        slave_serdes.cd_serdes_div.clk.attr.add("keep")
-        platform.add_period_constraint(slave_serdes.cd_rtio.clk, 16.0),
-        platform.add_period_constraint(slave_serdes.cd_serdes.clk, 1.6),
-        platform.add_period_constraint(slave_serdes.cd_serdes_div.clk, 6.4)
+        slave_serdes.cd_serdes_10x.clk.attr.add("keep")
+        slave_serdes.cd_serdes_2p5x.clk.attr.add("keep")
+        platform.add_period_constraint(slave_serdes.cd_serdes.clk, 16.0),
+        platform.add_period_constraint(slave_serdes.cd_serdes_10x.clk, 1.6),
+        platform.add_period_constraint(slave_serdes.cd_serdes_2p5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            slave_serdes.cd_rtio.clk,
             slave_serdes.cd_serdes.clk,
-            slave_serdes.cd_serdes_div.clk)
+            slave_serdes.cd_serdes_10x.clk,
+            slave_serdes.cd_serdes_2p5x.clk)
 
         counter = Signal(32)
-        self.sync.rtio += counter.eq(counter + 1)
+        self.sync.serdes += counter.eq(counter + 1)
         self.comb += [
             slave_serdes.encoder.d[0].eq(counter),
             slave_serdes.encoder.d[1].eq(counter)
@@ -153,17 +153,17 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.sync.sys += slave_sys_counter.eq(slave_sys_counter + 1)
         #self.comb += platform.request("user_led", 4).eq(slave_sys_counter[26]) # FIXME
 
-        slave_rtio_counter = Signal(32)
-        self.sync.rtio += slave_rtio_counter.eq(slave_rtio_counter + 1)
-        #self.comb += platform.request("user_led", 5).eq(slave_rtio_counter[26]) # FIXME
-
-        slave_serdes_div_counter = Signal(32)
-        self.sync.serdes_div += slave_serdes_div_counter.eq(slave_serdes_div_counter + 1)
-        #self.comb += platform.request("user_led", 6).eq(slave_serdes_div_counter[26]) # FIXME
-
         slave_serdes_counter = Signal(32)
         self.sync.serdes += slave_serdes_counter.eq(slave_serdes_counter + 1)
-        #self.comb += platform.request("user_led", 7).eq(slave_serdes_counter[26]) # FIXME
+        #self.comb += platform.request("user_led", 5).eq(slave_serdes_counter[26]) # FIXME
+
+        slave_serdes_2p5x_counter = Signal(32)
+        self.sync.serdes_2p5x += slave_serdes_2p5x_counter.eq(slave_serdes_2p5x_counter + 1)
+        #self.comb += platform.request("user_led", 6).eq(slave_serdes_2p5x_counter[26]) # FIXME
+
+        slave_serdes_10x_counter = Signal(32)
+        self.sync.serdes_10x += slave_serdes_10x_counter.eq(slave_serdes_10x_counter + 1)
+        #self.comb += platform.request("user_led", 7).eq(slave_serdes_10x_counter[26]) # FIXME
 
         analyzer_signals = [
             slave_serdes.encoder.k[0],
@@ -180,7 +180,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             slave_serdes.decoders[1].d,
             slave_serdes.decoders[1].k,
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="rtio")
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):
