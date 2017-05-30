@@ -1,8 +1,9 @@
 from litex.gen import *
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
-from litex.gen.genlib.cdc import Gearbox
+from litex.gen.genlib.cdc import MultiReg, PulseSynchronizer, Gearbox
 from litex.gen.genlib.misc import BitSlip
 
+from litex.soc.interconnect.csr import *
 from litex.soc.cores.code_8b10b import Encoder, Decoder
 
 from transceiver.prbs import *
@@ -59,57 +60,96 @@ class SERDESPLL(Module):
         self.comb += self.lock.eq(pll_locked)
 
 
-class PhaseDetector(Module):
-    # TODO: test and handle corner cases
-    def __init__(self):
+class PhaseDetector(Module, AutoCSR):
+    def __init__(self, nbits=8):
         self.mdata = Signal(8)
         self.sdata = Signal(8)
 
-        self.ce = Signal()
-        self.inc = Signal()
+        self.reset = CSR()
+        self.status = CSRStatus(2)
 
         # # #
 
-        # algorithm:
-        # - if the two samples taken a half-bit period apart (following a transition)
-        #   are the same, then the sampling point is too late and the input delays
-        #   need to be reduced by one tap
-        # - if the two samples taken (following a transition) are different, then
-        #   the sampling point is too early and the input delays need to be increased
-        #   by one tap
-
-        mdata_d = Signal(8)
-        sdata_d = Signal(8)
-        self.sync += [
-            mdata_d.eq(self.mdata),
-            sdata_d.eq(self.sdata)
-        ]
+        # ideal sampling (middle of the eye):
+        #  _____       _____       _____
+        # |     |_____|     |_____|     |_____|   data
+        #    +     +     +     +     +     +      master sampling
+        #       -     -     -     -     -     -   slave sampling (90°/bit period)
+        # Since taps are fixed length delays, this ideal case is not possible
+        # and we will fall in these 2 following possible cases:
+        #
+        # 1) too late sampling (idelay needs to be decremented):
+        #  _____       _____       _____
+        # |     |_____|     |_____|     |_____|   data
+        #     +     +     +     +     +     +     master sampling
+        #        -     -     -     -     -     -  slave sampling (90°/bit period)
+        # on mdata transition, mdata != sdata
+        #
+        #
+        # 2) too early sampling (idelay needs to be incremented):
+        #  _____       _____       _____
+        # |     |_____|     |_____|     |_____|   data
+        #   +     +     +     +     +     +       master sampling
+        #      -     -     -     -     -     -    slave sampling (90°/bit period)
+        # on mdata transition, mdata == sdata
 
         transition = Signal()
-        self.comb += transition.eq((mdata_d != self.mdata) & (sdata_d != self.sdata))
+        inc = Signal()
+        dec = Signal()
 
-        self.sync += [
-            self.ce.eq(0),
-            self.inc.eq(0),
-            If(transition,
-                self.ce.eq(1),
-                If(self.mdata == self.sdata,
-                    self.inc.eq(0)
-                ).Else(
-                    self.inc.eq(1)
-                )
+        # find transition
+        mdata_d = Signal(8)
+        self.sync.serdes_div += mdata_d.eq(self.mdata)
+        self.comb += transition.eq(mdata_d != self.mdata)
+
+
+        # find what to do
+        self.comb += [
+            inc.eq(transition & (self.mdata == self.sdata)),
+            dec.eq(transition & (self.mdata != self.sdata))
+        ]
+
+        # error accumulator
+        lateness = Signal(nbits, reset=2**(nbits - 1))
+        too_late = Signal()
+        too_early = Signal()
+        reset_lateness = Signal()
+        self.comb += [
+            too_late.eq(lateness == (2**nbits - 1)),
+            too_early.eq(lateness == 0)
+        ]
+        self.sync.serdes_div += [
+            If(reset_lateness,
+                lateness.eq(2**(nbits - 1))
+            ).Elif(~too_late & ~too_early,
+                If(inc, lateness.eq(lateness - 1)),
+                If(dec, lateness.eq(lateness + 1))
             )
         ]
 
+        # control / status cdc
+        self.specials += MultiReg(Cat(too_late, too_early), self.status.status)
+        self.submodules.do_reset_lateness = PulseSynchronizer("sys", "serdes_div")
+        self.comb += [
+            reset_lateness.eq(self.do_reset_lateness.o),
+            self.do_reset_lateness.i.eq(self.reset.re)
+        ]
 
-class SERDES(Module):
+
+class SERDES(Module, AutoCSR):
     def __init__(self, pll, pads, mode="master"):
-        self.tx_produce_square_wave = Signal()
+        self.tx_pattern = CSRStorage(20)
+        self.tx_produce_square_wave = CSRStorage()
+        self.tx_prbs_config = CSRStorage(2)
 
-        self.rx_bitslip_value = Signal(5, reset=7)
-        self.rx_delay_rst = Signal()
-        self.rx_delay_inc = Signal()
-        self.rx_delay_ce = Signal()
+        self.rx_pattern = CSRStatus(20)
+        self.rx_prbs_config = CSRStorage(2)
+        self.rx_prbs_errors = CSRStatus(32)
+
+        self.rx_bitslip_value = CSRStorage(5)
+        self.rx_delay_rst = CSR()
+        self.rx_delay_inc = CSRStorage()
+        self.rx_delay_ce = CSR()
 
         # # #
 
@@ -139,10 +179,35 @@ class SERDES(Module):
             AsyncResetSynchronizer(self.cd_serdes_div, ~pll.lock)
         ]
 
-        # tx clock
+        # control/status cdc
+        tx_pattern = Signal(20)
+        tx_produce_square_wave = Signal()
+        tx_prbs_config = Signal(2)
+
+        rx_pattern = Signal(20)
+        rx_prbs_config = Signal(2)
+        rx_prbs_errors = Signal(32)
+
+        rx_bitslip_value = Signal(5)
+
+        self.specials += [
+            MultiReg(self.tx_pattern.storage, tx_pattern, "rtio"),
+            MultiReg(self.tx_produce_square_wave.storage, tx_produce_square_wave, "rtio"),
+            MultiReg(self.tx_prbs_config.storage, tx_prbs_config, "rtio"),
+        ]
+
+        self.specials += [
+            MultiReg(rx_pattern, self.rx_pattern.status, "sys"),
+            MultiReg(self.rx_prbs_config.storage, rx_prbs_config, "rtio"),
+            MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys"), # FIXME
+        ]
+
+        self.specials += MultiReg(self.rx_bitslip_value.storage, rx_bitslip_value, "rtio"),
+
+        # tx clock (linerate/10)
         if mode == "master":
             self.submodules.tx_clk_gearbox = Gearbox(20, "rtio", 8, "serdes_div")
-            self.comb += self.tx_clk_gearbox.i.eq(0b11111000001111100000) # linerate/10
+            self.comb += self.tx_clk_gearbox.i.eq(0b11111000001111100000)
 
             clk_o = Signal()
             self.specials += [
@@ -169,10 +234,13 @@ class SERDES(Module):
 
         # tx data and prbs
         self.submodules.tx_prbs = ClockDomainsRenamer("rtio")(PRBSTX(20, True))
+        self.comb += self.tx_prbs.config.eq(tx_prbs_config)
         self.submodules.tx_gearbox = Gearbox(20, "rtio", 8, "serdes_div")
-        self.comb += [
+        self.sync.rtio += [
             self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(2)])),
-            If(self.tx_produce_square_wave,
+            If(tx_pattern != 0,
+                self.tx_gearbox.i.eq(tx_pattern)
+            ).Elif(tx_produce_square_wave,
                 # square wave @ linerate/20 for scope observation
                 self.tx_gearbox.i.eq(0b11111111110000000000)
             ).Else(
@@ -230,7 +298,8 @@ class SERDES(Module):
         self.submodules.rx_gearbox = Gearbox(8, "serdes_div", 20, "rtio")
         self.submodules.rx_bitslip = ClockDomainsRenamer("rtio")(BitSlip(20))
 
-        self.submodules.phase_detector = ClockDomainsRenamer("serdes_div")(PhaseDetector())
+        self.submodules.phase_detector = ClockDomainsRenamer("serdes_div")(
+            PhaseDetector())
 
         # use 2 serdes for phase detection: 1 master/ 1 slave
         serdes_m_i_nodelay = Signal()
@@ -246,25 +315,19 @@ class SERDES(Module):
 
         serdes_m_i_delayed = Signal()
         serdes_m_q = Signal(8)
-        serdes_m_idelay_value = int(1/(2*pll.linerate)/78e-12) # half bit period
+        serdes_m_idelay_value = int(1/(4*pll.linerate)/78e-12) # 1/4 bit period
         assert serdes_m_idelay_value < 32
         self.specials += [
             Instance("IDELAYE2",
                 p_DELAY_SRC="IDATAIN", p_SIGNAL_PATTERN="DATA",
-                p_CINVCTRL_SEL="FALSE", p_HIGH_PERFORMANCE_MODE="TRUE", p_REFCLK_FREQUENCY=200.0,
-                p_PIPE_SEL="FALSE", p_IDELAY_TYPE="VARIABLE", p_IDELAY_VALUE=serdes_m_idelay_value,
+                p_CINVCTRL_SEL="FALSE", p_HIGH_PERFORMANCE_MODE="TRUE",
+                p_REFCLK_FREQUENCY=200.0, p_PIPE_SEL="FALSE",
+                p_IDELAY_TYPE="VARIABLE", p_IDELAY_VALUE=serdes_m_idelay_value,
 
-                # automatic delay config
-                #i_C=ClockSignal("serdes_div"),
-                #i_LD=ResetSignal("serdes_div"),
-                #i_CE=self.phase_detector.ce,
-                #i_LDPIPEEN=0, i_INC=self.phase_detector.inc,
-
-                # manual delay config
                 i_C=ClockSignal(),
-                i_LD=self.rx_delay_rst,
-                i_CE=self.rx_delay_ce,
-                i_LDPIPEEN=0, i_INC=self.rx_delay_inc,
+                i_LD=self.rx_delay_rst.re,
+                i_CE=self.rx_delay_ce.re,
+                i_LDPIPEEN=0, i_INC=self.rx_delay_inc.storage,
 
                 i_IDATAIN=serdes_m_i_nodelay, o_DATAOUT=serdes_m_i_delayed
             ),
@@ -276,7 +339,8 @@ class SERDES(Module):
                 i_DDLY=serdes_m_i_delayed,
                 i_CE1=1,
                 i_RST=ResetSignal("serdes_div"),
-                i_CLK=ClockSignal("serdes"), i_CLKB=~ClockSignal("serdes"), i_CLKDIV=ClockSignal("serdes_div"),
+                i_CLK=ClockSignal("serdes"), i_CLKB=~ClockSignal("serdes"),
+                i_CLKDIV=ClockSignal("serdes_div"),
                 i_BITSLIP=0,
                 o_Q8=serdes_m_q[0], o_Q7=serdes_m_q[1],
                 o_Q6=serdes_m_q[2], o_Q5=serdes_m_q[3],
@@ -288,27 +352,21 @@ class SERDES(Module):
 
         serdes_s_i_delayed = Signal()
         serdes_s_q = Signal(8)
-        serdes_s_idelay_value = int(1/(pll.linerate)/78e-12) # bit period
+        serdes_s_idelay_value = int(1/(2*pll.linerate)/78e-12) # 1/2 bit period
         assert serdes_s_idelay_value < 32
         self.specials += [
             Instance("IDELAYE2",
                 p_DELAY_SRC="IDATAIN", p_SIGNAL_PATTERN="DATA",
-                p_CINVCTRL_SEL="FALSE", p_HIGH_PERFORMANCE_MODE="TRUE", p_REFCLK_FREQUENCY=200.0,
-                p_PIPE_SEL="FALSE", p_IDELAY_TYPE="VARIABLE", p_IDELAY_VALUE=serdes_s_idelay_value,
+                p_CINVCTRL_SEL="FALSE", p_HIGH_PERFORMANCE_MODE="TRUE",
+                p_REFCLK_FREQUENCY=200.0, p_PIPE_SEL="FALSE",
+                p_IDELAY_TYPE="VARIABLE", p_IDELAY_VALUE=serdes_s_idelay_value,
 
-                # automatic delay config
-                #i_C=ClockSignal("serdes_div"),
-                #i_LD=ResetSignal("serdes_div"),
-                #i_CE=self.phase_detector.ce,
-                #i_LDPIPEEN=0, i_INC=self.phase_detector.inc,
-
-                # manual delay config
                 i_C=ClockSignal(),
-                i_LD=self.rx_delay_rst,
-                i_CE=self.rx_delay_ce,
-                i_LDPIPEEN=0, i_INC=self.rx_delay_inc,
+                i_LD=self.rx_delay_rst.re,
+                i_CE=self.rx_delay_ce.re,
+                i_LDPIPEEN=0, i_INC=self.rx_delay_inc.storage,
 
-                i_IDATAIN=~serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed
+                i_IDATAIN=serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed
             ),
             Instance("ISERDESE2",
                 p_DATA_WIDTH=8, p_DATA_RATE="DDR",
@@ -318,7 +376,8 @@ class SERDES(Module):
                 i_DDLY=serdes_s_i_delayed,
                 i_CE1=1,
                 i_RST=ResetSignal("serdes_div"),
-                i_CLK=ClockSignal("serdes"), i_CLKB=~ClockSignal("serdes"), i_CLKDIV=ClockSignal("serdes_div"),
+                i_CLK=ClockSignal("serdes"), i_CLKB=~ClockSignal("serdes"),
+                i_CLKDIV=ClockSignal("serdes_div"),
                 i_BITSLIP=0,
                 o_Q8=serdes_s_q[0], o_Q7=serdes_s_q[1],
                 o_Q6=serdes_s_q[2], o_Q5=serdes_s_q[3],
@@ -326,14 +385,19 @@ class SERDES(Module):
                 o_Q2=serdes_s_q[6], o_Q1=serdes_s_q[7]
             ),
         ]
-        self.comb += self.phase_detector.sdata.eq(serdes_s_q)
+        self.comb += self.phase_detector.sdata.eq(~serdes_s_q)
 
         # rx data and prbs
         self.submodules.rx_prbs = ClockDomainsRenamer("rtio")(PRBSRX(20, True))
         self.comb += [
+            self.rx_prbs.config.eq(rx_prbs_config),
+            rx_prbs_errors.eq(self.rx_prbs.errors)
+        ]
+        self.comb += [
             self.rx_gearbox.i.eq(serdes_m_q),
-            self.rx_bitslip.value.eq(self.rx_bitslip_value),
+            self.rx_bitslip.value.eq(rx_bitslip_value),
             self.rx_bitslip.i.eq(self.rx_gearbox.o),
+            rx_pattern.eq(self.rx_gearbox.o),
             self.decoders[0].input.eq(self.rx_bitslip.o[:10]),
             self.decoders[1].input.eq(self.rx_bitslip.o[10:]),
             self.rx_prbs.i.eq(self.rx_bitslip.o)
