@@ -95,34 +95,9 @@ class JESDTestSoC(SoCCore):
         ]
 
 
-class AMCRTMLinkControl(Module, AutoCSR):
-    def __init__(self):
-        self._tx_prbs_config = CSRStorage(2)
-
-        self._rx_bitslip_value = CSRStorage(5)
-        self._rx_delay_rst = CSR()
-        self._rx_delay_inc = CSRStorage()
-        self._rx_delay_ce = CSR()
-
-        self._rx_prbs_config = CSRStorage(2)
-        self._rx_prbs_errors = CSRStatus(32)
-
-        # # #
-
-        self.tx_prbs_config = self._tx_prbs_config.storage
-
-        self.rx_bitslip_value = self._rx_bitslip_value.storage
-        self.rx_delay_rst = self._rx_delay_rst.r & self._rx_delay_rst.re
-        self.rx_delay_inc = self._rx_delay_inc.storage
-        self.rx_delay_ce = self._rx_delay_ce.r & self._rx_delay_ce.re
-
-        self.rx_prbs_config = self._rx_prbs_config.storage
-        self.rx_prbs_errors = self._rx_prbs_errors.status
-
-
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "slave_serdes_control": 21,
+        "slave_serdes": 21,
         "analyzer": 22
     }
     csr_map.update(SoCCore.csr_map)
@@ -154,18 +129,6 @@ class AMCRTMLinkTestSoC(SoCCore):
         slave_pads = platform.request("amc_rtm_link", 0)
         self.submodules.slave_serdes = slave_serdes = SERDES(
             slave_pll, slave_pads, mode="slave")
-        self.comb += slave_serdes.tx_produce_square_wave.eq(0) # FIXME
-
-        self.submodules.slave_serdes_control = slave_serdes_control = AMCRTMLinkControl()
-        self.comb += [
-            slave_serdes.tx_prbs.config.eq(slave_serdes_control.tx_prbs_config),
-            slave_serdes.rx_bitslip_value.eq(slave_serdes_control.rx_bitslip_value),
-            slave_serdes.rx_delay_rst.eq(slave_serdes_control.rx_delay_rst),
-            slave_serdes.rx_delay_inc.eq(slave_serdes_control.rx_delay_inc),
-            slave_serdes.rx_delay_ce.eq(slave_serdes_control.rx_delay_ce),
-            slave_serdes.rx_prbs.config.eq(slave_serdes_control.rx_prbs_config),
-            slave_serdes_control.rx_prbs_errors.eq(slave_serdes.rx_prbs.errors)
-        ]
 
         slave_serdes.cd_rtio.clk.attr.add("keep")
         slave_serdes.cd_serdes.clk.attr.add("keep")
@@ -216,8 +179,6 @@ class AMCRTMLinkTestSoC(SoCCore):
             slave_serdes.decoders[1].input,
             slave_serdes.decoders[1].d,
             slave_serdes.decoders[1].k,
-
-            slave_serdes.rx_prbs.errors,
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="rtio")
 

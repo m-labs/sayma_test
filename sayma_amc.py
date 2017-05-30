@@ -414,32 +414,9 @@ class DRTIOTestSoC(SoCCore):
             gth.cd_rtio_rx.clk)
 
 
-class AMCRTMLinkControl(Module, AutoCSR):
-    def __init__(self):
-        self._tx_prbs_config = CSRStorage(2)
-
-        self._rx_bitslip_value = CSRStorage(5)
-        self._rx_delay_rst = CSR()
-        self._rx_delay_inc = CSRStorage()
-        self._rx_delay_ce = CSR()
-
-        self._rx_prbs_config = CSRStorage(2)
-        self._rx_prbs_errors = CSRStatus(32)
-
-        # # #
-
-        self.tx_prbs_config = self._tx_prbs_config.storage
-
-        self.rx_bitslip_value = self._rx_bitslip_value.storage
-
-        self.rx_prbs_config = self._rx_prbs_config.storage
-        self.rx_prbs_errors = self._rx_prbs_errors.status
-
-
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "master_serdes_control": 20,
-        "slave_serdes_control": 21,
+        "master_serdes": 20,
         "analyzer": 22
     }
     csr_map.update(SoCCore.csr_map)
@@ -468,14 +445,6 @@ class AMCRTMLinkTestSoC(SoCCore):
         master_pads = platform.request("amc_rtm_link")
         self.submodules.master_serdes = master_serdes = SERDES(
             master_pll, master_pads, mode="master")
-        self.comb += master_serdes.tx_produce_square_wave.eq(0) # FIXME
-        self.submodules.master_serdes_control = master_serdes_control = AMCRTMLinkControl()
-        self.comb += [
-            master_serdes.tx_prbs.config.eq(master_serdes_control.tx_prbs_config),
-            master_serdes.rx_bitslip_value.eq(master_serdes_control.rx_bitslip_value),
-            master_serdes.rx_prbs.config.eq(master_serdes_control.rx_prbs_config),
-            master_serdes_control.rx_prbs_errors.eq(master_serdes.rx_prbs.errors)
-        ]
 
         master_serdes.cd_rtio.clk.attr.add("keep")
         master_serdes.cd_serdes.clk.attr.add("keep")
@@ -525,9 +494,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             master_serdes.decoders[0].k,
             master_serdes.decoders[1].input,
             master_serdes.decoders[1].d,
-            master_serdes.decoders[1].k,
-
-            master_serdes.rx_prbs.errors,
+            master_serdes.decoders[1].k
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="rtio")
 
