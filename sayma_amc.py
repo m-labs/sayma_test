@@ -33,10 +33,21 @@ _io = [
     # clock
     ("clk50", 0, Pins("AF9"), IOStandard("LVCMOS18")),
 
+    # leds
+    ("user_led", 0, Pins("AG9"), IOStandard("LVCMOS18")),
+    ("user_led", 1, Pins("AJ10"), IOStandard("LVCMOS18")),
+    ("user_led", 2, Pins("AJ13"), IOStandard("LVCMOS18")),
+    ("user_led", 3, Pins("AE13"), IOStandard("LVCMOS18")),
+
     # serial
     ("serial", 0,
         Subsignal("tx", Pins("AK8")),
         Subsignal("rx", Pins("AL8")),
+        IOStandard("LVCMOS18")
+    ),
+    ("serial", 1,
+        Subsignal("tx", Pins("M27")),
+        Subsignal("rx", Pins("L27")),
         IOStandard("LVCMOS18")
     ),
 
@@ -224,6 +235,15 @@ class _CRG(Module):
             )
         self.specials += Instance("IDELAYCTRL", p_SIM_DEVICE="ULTRASCALE",
             i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
+
+        led_counter = Signal(32)
+        self.sync += led_counter.eq(led_counter + 1)
+        self.comb += [
+            platform.request("user_led", 0).eq(led_counter[26]),
+            platform.request("user_led", 1).eq(led_counter[27]),
+            platform.request("user_led", 2).eq(led_counter[28]),
+            platform.request("user_led", 3).eq(led_counter[29])
+        ]
 
 
 class SDRAMTestSoC(SoCSDRAM):
