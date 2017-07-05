@@ -162,6 +162,17 @@ _io = [
     ),
     ("sfp_tx_disable_n", 1, Pins("AM12"), IOStandard("LVCMOS18")),
 
+    # rtm
+    ("rtm_refclk125", 0,
+        Subsignal("p", Pins("V6")),
+        Subsignal("n", Pins("V5")),
+    ),
+    ("rtm_refclk156p25", 0,
+        Subsignal("p", Pins("P6")),
+        Subsignal("n", Pins("P5")),
+    ),
+
+
     # amc_rtm_link
     ("amc_rtm_link", 0,
         Subsignal("clk_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
@@ -392,7 +403,7 @@ class DRTIOTestSoC(SoCCore):
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
         refclk = Signal()
-        refclk_pads = platform.request("dac_refclk") # FIXME
+        refclk_pads = platform.request("rtm_refclk125")
         self.specials += [
             Instance("IBUFDS_GTE3",
                 i_CEB=0,
