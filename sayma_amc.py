@@ -244,7 +244,7 @@ class SDRAMTestSoC(SoCSDRAM):
         )
         self.submodules.crg = _CRG(platform)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
+                                                  clk_freq, baudrate=2e6))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
@@ -283,7 +283,7 @@ class JESDTestSoC(SoCCore):
         )
         self.submodules.crg = _CRG(platform)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
+                                                  clk_freq, baudrate=2e6))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
@@ -365,7 +365,7 @@ class DRTIOTestSoC(SoCCore):
         )
         self.submodules.crg = _CRG(platform)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
+                                                  clk_freq, baudrate=2e6))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
@@ -433,7 +433,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         )
         self.submodules.crg = _CRG(platform)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
+                                                  clk_freq, baudrate=2e6))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
