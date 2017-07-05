@@ -237,6 +237,7 @@ class SDRAMTestSoC(SoCSDRAM):
         SoCSDRAM.__init__(self, platform, clk_freq,
             cpu_type=None,
             csr_data_width=32,
+            l2_size=128,
             with_uart=False,
             ident="Sayma AMC SDRAM Test Design",
             with_timer=False
