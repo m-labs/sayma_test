@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from litex.soc.tools.remote import RemoteClient
 
-wb = RemoteClient(debug=True)
+wb = RemoteClient()
 wb.open()
 
 # # #

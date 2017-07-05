@@ -17,7 +17,7 @@ dfii_command_ras    = 0x08
 dfii_command_wrdata = 0x10
 dfii_command_rddata = 0x20
 
-wb = RemoteClient(debug=True)
+wb = RemoteClient()
 wb.open()
 regs = wb.regs
 
@@ -94,8 +94,8 @@ def check_pattern(length):
         errors += error
     return errors
 
-# find working bitslips and delays
-# TODO
+write_pattern(8192)
+check_pattern(8192)
 
 # # #
 
