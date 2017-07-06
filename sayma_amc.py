@@ -648,8 +648,11 @@ def main():
     if len(sys.argv) < 2:
         print("missing target (sdram or jesd or drtio or amc_rtm_link)")
         exit()
-    if sys.argv[1] == "sdram":
-        soc = SDRAMTestSoC(platform)
+    if sys.argv[1] == "ddram":
+        dw = "32"
+        if len(sys.argv) > 2:
+            dw = sys.argv[2]
+        soc = SDRAMTestSoC(platform, "ddram_"+dw)
     elif sys.argv[1] == "jesd":
         soc = JESDTestSoC(platform)
     elif sys.argv[1] == "drtio":
