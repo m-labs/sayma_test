@@ -98,6 +98,47 @@ def check_pattern(length, debug=False):
         errors += error
     return errors
 
+#
+
+KB = 1024
+MB = 1024*KB
+GB = 1024*MB
+
+#
+
+def write_test(base, length, blocking=True):
+    wb.regs.generator_reset.write(1)
+    wb.regs.generator_reset.write(0)
+    wb.regs.generator_base.write(base) # FIXME in bytes
+    wb.regs.generator_length.write((length*8)//128) # FIXME in bytes
+    wb.regs.generator_start.write(1)
+    if blocking:
+        while(not wb.regs.generator_done.read()):
+            pass
+        ticks = wb.regs.generator_ticks.read()
+        speed = wb.constants.config_clock_frequency*length/ticks
+        return speed
+    else:
+        return None
+
+def read_test(base, length, blocking=True):
+    wb.regs.checker_reset.write(1)
+    wb.regs.checker_reset.write(0)
+    wb.regs.checker_base.write(base) # FIXME in bytes
+    wb.regs.checker_length.write((length*8)//128) # FIXME in bytes
+    start = time.time()
+    wb.regs.checker_start.write(1)
+    if blocking:
+        while(not wb.regs.checker_done.read()):
+            pass
+        ticks = wb.regs.checker_ticks.read()
+        speed = wb.constants.config_clock_frequency*length/ticks
+        errors = wb.regs.checker_errors.read()
+        return speed, errors
+    else:
+        return None, None
+
+#
 
 groups = {
     "dfi_phase0": 0,
@@ -108,11 +149,12 @@ groups = {
 
 analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
 analyzer.configure_group(groups["dfi_phase0"])
-analyzer.configure_trigger(cond={"dfi_p0_rddata_valid" : 1})
-analyzer.run(offset=128, length=256)
+analyzer.configure_trigger(cond={})
 
-write_pattern(128)
-check_pattern(128)
+write_test(0x00000000, 1024*MB, False)
+#read_test(0x00000000, 1024*MB, False)
+
+analyzer.run(offset=128, length=256)
 
 analyzer.wait_done()
 analyzer.upload()
