@@ -16,6 +16,8 @@ from litex.soc.cores.uart import UARTWishboneBridge
 
 from litedram.modules import MT41J256M16
 from litedram.phy import kusddrphy
+from litedram.frontend.bist import LiteDRAMBISTGenerator
+from litedram.frontend.bist import LiteDRAMBISTChecker
 
 from litejesd204b.common import *
 from litejesd204b.phy.gth import GTHQuadPLL
@@ -260,6 +262,8 @@ class _CRG(Module):
 class SDRAMTestSoC(SoCSDRAM):
     csr_map = {
         "ddrphy":    20,
+        "generator": 21,
+        "checker":   22,
         "analyzer":  30
     }
     csr_map.update(SoCSDRAM.csr_map)
@@ -289,6 +293,15 @@ class SDRAMTestSoC(SoCSDRAM):
                             sdram_module.geom_settings,
                             sdram_module.timing_settings)
 
+        # sdram bist
+        generator_user_port = self.sdram.crossbar.get_port()
+        self.submodules.generator = LiteDRAMBISTGenerator(
+            generator_user_port, random=False)
+        checker_user_port = self.sdram.crossbar.get_port()
+        self.submodules.checker = LiteDRAMBISTChecker(
+            checker_user_port, random=False)
+
+        # analyzer
         dfi_phase0_group = [
             self.ddrphy.dfi.phases[0].address,
             self.ddrphy.dfi.phases[0].bank,
