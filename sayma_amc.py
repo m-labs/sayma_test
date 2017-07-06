@@ -656,7 +656,10 @@ def main():
     elif sys.argv[1] == "jesd":
         soc = JESDTestSoC(platform)
     elif sys.argv[1] == "drtio":
-        soc = DRTIOTestSoC(platform)
+        sfp = 0
+        if len(sys.argv) > 2:
+            sfp = int(sys.argv[2])
+        soc = DRTIOTestSoC(platform, sfp)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
     builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv")
