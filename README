@@ -1,0 +1,8 @@
+Test designs for Sayma boards (ddr3, drtio, amc-rtm link, jesd204b)
+
+[> Status
+---------
+- ddr3: untested
+- drtio: validated at 1.25Gbps.
+- amc-rtm link: untested
+- jesd204b: untested
