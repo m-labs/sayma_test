@@ -116,6 +116,33 @@ _io = [
         Subsignal("reset_n", Pins("F14"), IOStandard("LVCMOS15"))
     ),
 
+    ("ddram_16", 1,
+        Subsignal("a", Pins(
+            "E15 D15 J16 K18 H16 K17 K16 J15",
+            "K15 D14 D18 G15 L18 G14 L15"),
+            IOStandard("SSTL15")),
+        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15")),
+        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15")),
+        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15")),
+        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15")),
+        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15")),
+        Subsignal("dm", Pins("F27 E26"),
+            IOStandard("SSTL15")),
+        Subsignal("dq", Pins(
+            "C28 B27 A27 C27 D28 E28 A28 D29",
+            "D25 C26 E25 B25 C24 A25 D24 B26"),
+            IOStandard("SSTL15_DCI")),
+        Subsignal("dqs_p", Pins("B29 B24"),
+            IOStandard("DIFF_SSTL15")),
+        Subsignal("dqs_n", Pins("A29 A24"),
+            IOStandard("DIFF_SSTL15")),
+        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15")),
+        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15")),
+        Subsignal("cke", Pins("H18"), IOStandard("SSTL15")),
+        Subsignal("odt", Pins("F19"), IOStandard("SSTL15")),
+        Subsignal("reset_n", Pins("F14"), IOStandard("LVCMOS15"))
+    ),
+
     # dac
     ("dac_refclk", 0,
         Subsignal("p", Pins("K6")),
@@ -280,20 +307,23 @@ class SDRAMTestSoC(SoCSDRAM):
     }
     csr_map.update(SoCSDRAM.csr_map)
 
-    def __init__(self, platform, ddram="ddram_32"):
+    def __init__(self, platform, ddram="ddram_32", with_cpu=False):
         clk_freq = int(125e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
-            cpu_type=None,
+            cpu_type="lm32" if with_cpu else None,
+            integrated_rom_size=0x8000 if with_cpu else 0,
+            integrated_sram_size=0x8000 if with_cpu else 0,
             csr_data_width=32,
             l2_size=128,
-            with_uart=False,
+            with_uart=with_cpu, uart_stub=True,
             ident="Sayma AMC SDRAM Test Design",
-            with_timer=False
+            with_timer=with_cpu
         )
         self.submodules.crg = _CRG(platform)
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=2e6))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
+        if not with_cpu:
+            self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
+                                                      clk_freq, baudrate=2e6))
+            self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
@@ -384,7 +414,8 @@ class SDRAMTestSoC(SoCSDRAM):
             2 : dfi_phase2_group,
             3 : dfi_phase3_group
         }
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512)
+        if not with_cpu:
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512)
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):
@@ -650,9 +681,12 @@ def main():
         exit()
     if sys.argv[1] == "ddram":
         dw = "32"
+        with_cpu = False
         if len(sys.argv) > 2:
             dw = sys.argv[2]
-        soc = SDRAMTestSoC(platform, "ddram_"+dw)
+        if len(sys.argv) > 3:
+            with_cpu = bool(sys.argv[3])
+        soc = SDRAMTestSoC(platform, "ddram_" + dw, with_cpu)
     elif sys.argv[1] == "jesd":
         soc = JESDTestSoC(platform)
     elif sys.argv[1] == "drtio":
