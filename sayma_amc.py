@@ -259,7 +259,8 @@ class _CRG(Module):
 
 class SDRAMTestSoC(SoCSDRAM):
     csr_map = {
-        "ddrphy":    20
+        "ddrphy":    20,
+        "analyzer":  30
     }
     csr_map.update(SoCSDRAM.csr_map)
 
@@ -287,6 +288,82 @@ class SDRAMTestSoC(SoCSDRAM):
         self.register_sdram(self.ddrphy,
                             sdram_module.geom_settings,
                             sdram_module.timing_settings)
+
+        dfi_phase0_group = [
+            self.ddrphy.dfi.phases[0].address,
+            self.ddrphy.dfi.phases[0].bank,
+            self.ddrphy.dfi.phases[0].ras_n,
+            self.ddrphy.dfi.phases[0].cas_n,
+            self.ddrphy.dfi.phases[0].we_n,
+            self.ddrphy.dfi.phases[0].cs_n,
+            self.ddrphy.dfi.phases[0].cke,
+            self.ddrphy.dfi.phases[0].odt,
+            self.ddrphy.dfi.phases[0].reset_n,
+            self.ddrphy.dfi.phases[0].wrdata_en,
+            self.ddrphy.dfi.phases[0].wrdata_mask,
+            self.ddrphy.dfi.phases[0].wrdata,
+            self.ddrphy.dfi.phases[0].rddata,
+            self.ddrphy.dfi.phases[0].rddata_valid
+        ]
+        dfi_phase1_group = [
+            self.ddrphy.dfi.phases[1].address,
+            self.ddrphy.dfi.phases[1].bank,
+            self.ddrphy.dfi.phases[1].ras_n,
+            self.ddrphy.dfi.phases[1].cas_n,
+            self.ddrphy.dfi.phases[1].we_n,
+            self.ddrphy.dfi.phases[1].cs_n,
+            self.ddrphy.dfi.phases[1].cke,
+            self.ddrphy.dfi.phases[1].odt,
+            self.ddrphy.dfi.phases[1].reset_n,
+            self.ddrphy.dfi.phases[1].wrdata_en,
+            self.ddrphy.dfi.phases[1].wrdata_mask,
+            self.ddrphy.dfi.phases[1].wrdata,
+            self.ddrphy.dfi.phases[1].rddata,
+            self.ddrphy.dfi.phases[1].rddata_valid
+        ]
+        dfi_phase2_group = [
+            self.ddrphy.dfi.phases[2].address,
+            self.ddrphy.dfi.phases[2].bank,
+            self.ddrphy.dfi.phases[2].ras_n,
+            self.ddrphy.dfi.phases[2].cas_n,
+            self.ddrphy.dfi.phases[2].we_n,
+            self.ddrphy.dfi.phases[2].cs_n,
+            self.ddrphy.dfi.phases[2].cke,
+            self.ddrphy.dfi.phases[2].odt,
+            self.ddrphy.dfi.phases[2].reset_n,
+            self.ddrphy.dfi.phases[2].wrdata_en,
+            self.ddrphy.dfi.phases[2].wrdata_mask,
+            self.ddrphy.dfi.phases[2].wrdata,
+            self.ddrphy.dfi.phases[2].rddata,
+            self.ddrphy.dfi.phases[2].rddata_valid
+        ]
+        dfi_phase3_group = [
+            self.ddrphy.dfi.phases[3].address,
+            self.ddrphy.dfi.phases[3].bank,
+            self.ddrphy.dfi.phases[3].ras_n,
+            self.ddrphy.dfi.phases[3].cas_n,
+            self.ddrphy.dfi.phases[3].we_n,
+            self.ddrphy.dfi.phases[3].cs_n,
+            self.ddrphy.dfi.phases[3].cke,
+            self.ddrphy.dfi.phases[3].odt,
+            self.ddrphy.dfi.phases[3].reset_n,
+            self.ddrphy.dfi.phases[3].wrdata_en,
+            self.ddrphy.dfi.phases[3].wrdata_mask,
+            self.ddrphy.dfi.phases[3].wrdata,
+            self.ddrphy.dfi.phases[3].rddata,
+            self.ddrphy.dfi.phases[3].rddata_valid
+        ]
+        analyzer_signals = {
+            0 : dfi_phase0_group,
+            1 : dfi_phase1_group,
+            2 : dfi_phase2_group,
+            3 : dfi_phase3_group
+        }
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512)
+
+    def do_exit(self, vns):
+        if hasattr(self, "analyzer"):
+            self.analyzer.export_csv(vns, "test/analyzer.csv")
 
 
 def get_phy_pads(jesd_pads, n):
@@ -383,6 +460,9 @@ class JESDTestSoC(SoCCore):
             self.core.sink.converter3.eq(Cat(data3, data3))
         ]
 
+    def do_exit(self, vns):
+        pass
+
 
 class DRTIOTestSoC(SoCCore):
     def __init__(self, platform, sfp=0, loopback=True):
@@ -444,6 +524,9 @@ class DRTIOTestSoC(SoCCore):
             self.crg.cd_sys.clk,
             gth.cd_tx.clk,
             gth.cd_rx.clk)
+
+    def do_exit(self, vns):
+        pass
 
 
 class AMCRTMLinkTestSoC(SoCCore):
@@ -550,6 +633,7 @@ def main():
         soc = AMCRTMLinkTestSoC(platform)
     builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv")
     vns = builder.build()
+    soc.do_exit(vns)
 
 
 if __name__ == "__main__":
