@@ -306,10 +306,10 @@ class SDRAMTestSoC(SoCSDRAM):
                             sdram_module.timing_settings)
 
         # sdram bist
-        generator_user_port = self.sdram.crossbar.get_port()
+        generator_user_port = self.sdram.crossbar.get_port(mode="write", dw=32)
         self.submodules.generator = LiteDRAMBISTGenerator(
             generator_user_port, random=False)
-        checker_user_port = self.sdram.crossbar.get_port()
+        checker_user_port = self.sdram.crossbar.get_port(mode="read", dw=32)
         self.submodules.checker = LiteDRAMBISTChecker(
             checker_user_port, random=False)
 
