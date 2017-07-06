@@ -151,10 +151,16 @@ analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
 analyzer.configure_group(groups["dfi_phase0"])
 analyzer.configure_trigger(cond={})
 
+# configure bitslip (check if working with analyzer)
+bitslip = 0
+for i in range(32//8):
+    wb.regs.ddrphy_dly_sel.write(1<<i)
+    wb.regs.ddrphy_rdly_dq_bitslip.write(bitslip)
+
 write_test(0x00000000, 1024*MB, False)
 #read_test(0x00000000, 1024*MB, False)
 
-analyzer.run(offset=128, length=256)
+analyzer.run(offset=32, length=64)
 
 analyzer.wait_done()
 analyzer.upload()
