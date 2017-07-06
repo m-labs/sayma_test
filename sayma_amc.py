@@ -54,9 +54,10 @@ _io = [
     ),
 
     # sdram
-    ("ddram", 0,
+    ("ddram_64", 0,
         Subsignal("a", Pins(
-            "AE17 AL17 AG16 AG17 AD16 AH14 AD15 AK15 AF14 AF15 AL18 AL15 AE18 AJ15 AG14"),
+            "AE17 AL17 AG16 AG17 AD16 AH14 AD15 AK15",
+            "AF14 AF15 AL18 AL15 AE18 AJ15 AG14"),
             IOStandard("SSTL15")),
         Subsignal("ba", Pins("AF17 AD19 AD18"), IOStandard("SSTL15")),
         Subsignal("ras_n", Pins("AH19"), IOStandard("SSTL15")),
@@ -66,7 +67,14 @@ _io = [
         Subsignal("dm", Pins("AD21 AE25 AJ21 AM21 AH26 AN26 AJ29 AL32"),
             IOStandard("SSTL15")),
         Subsignal("dq", Pins(
-            "AE23 AG20 AF22 AF20 AE22 AD20 AG22 AE20 AJ24 AG24 AJ23 AF23 AH23 AF24 AH22 AG25 AL22 AL25 AM20 AK23 AK22 AL24 AL20 AL23 AM24 AN23 AN24 AP23 AP25 AN22 AP24 AM22 AH28 AK26 AK28 AM27 AJ28 AH27 AK27 AM26 AL30 AP29 AM30 AN28 AL29 AP28 AM29 AN27 AH31 AH32 AJ34 AK31 AJ31 AJ30 AH34 AK32 AN33 AP33 AM34 AP31 AM32 AN31 AL34 AN32"),
+            "AE23 AG20 AF22 AF20 AE22 AD20 AG22 AE20",
+            "AJ24 AG24 AJ23 AF23 AH23 AF24 AH22 AG25",
+            "AL22 AL25 AM20 AK23 AK22 AL24 AL20 AL23",
+            "AM24 AN23 AN24 AP23 AP25 AN22 AP24 AM22",
+            "AH28 AK26 AK28 AM27 AJ28 AH27 AK27 AM26",
+            "AL30 AP29 AM30 AN28 AL29 AP28 AM29 AN27",
+            "AH31 AH32 AJ34 AK31 AJ31 AJ30 AH34 AK32",
+            "AN33 AP33 AM34 AP31 AM32 AN31 AL34 AN32"),
             IOStandard("SSTL15_T_DCI")),
         Subsignal("dqs_p", Pins("AG21 AH24 AJ20 AP20 AL27 AN29 AH33 AN34"),
             IOStandard("DIFF_SSTL15")),
@@ -79,9 +87,10 @@ _io = [
         Subsignal("reset_n", Pins("AJ14"), IOStandard("LVCMOS15"))
     ),
 
-    ("ddram", 1,
+    ("ddram_32", 1,
         Subsignal("a", Pins(
-            "E15 D15 J16 K18 H16 K17 K16 J15 K15 D14 D18 G15 L18 G14 L15"),
+            "E15 D15 J16 K18 H16 K17 K16 J15",
+            "K15 D14 D18 G15 L18 G14 L15"),
             IOStandard("SSTL15")),
         Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15")),
         Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15")),
@@ -91,7 +100,10 @@ _io = [
         Subsignal("dm", Pins("F27 E26 D23 G24"),
             IOStandard("SSTL15")),
         Subsignal("dq", Pins(
-            "C28 B27 A27 C27 D28 E28 A28 D29 D25 C26 E25 B25 C24 A25 D24 B26 B20 D21 B22 E23 E22 D20 B21 A20 F23 H21 F24 G21 F22 E21 G22 E20"),
+            "C28 B27 A27 C27 D28 E28 A28 D29",
+            "D25 C26 E25 B25 C24 A25 D24 B26",
+            "B20 D21 B22 E23 E22 D20 B21 A20",
+            "F23 H21 F24 G21 F22 E21 G22 E20"),
             IOStandard("SSTL15_T_DCI")),
         Subsignal("dqs_p", Pins("B29 B24 C21 G20"),
             IOStandard("DIFF_SSTL15")),
@@ -268,7 +280,7 @@ class SDRAMTestSoC(SoCSDRAM):
     }
     csr_map.update(SoCSDRAM.csr_map)
 
-    def __init__(self, platform, ddram=0):
+    def __init__(self, platform, ddram="ddram_32"):
         clk_freq = int(125e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -286,8 +298,8 @@ class SDRAMTestSoC(SoCSDRAM):
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
-        # sdram
-        self.submodules.ddrphy = kusddrphy.KUSDDRPHY(platform.request("ddram", ddram))
+        # sdram 
+        self.submodules.ddrphy = kusddrphy.KUSDDRPHY(platform.request(ddram))
         sdram_module = MT41J256M16(self.clk_freq, "1:4")
         self.register_sdram(self.ddrphy,
                             sdram_module.geom_settings,
