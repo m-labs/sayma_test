@@ -680,6 +680,7 @@ class AMCRTMLinkTestSoC(SoCCore):
 
 def main():
     platform = Platform()
+    compile_gateware = True
     if len(sys.argv) < 2:
         print("missing target (sdram or jesd or drtio or amc_rtm_link)")
         exit()
@@ -690,6 +691,7 @@ def main():
             dw = sys.argv[2]
         if len(sys.argv) > 3:
             with_cpu = bool(sys.argv[3])
+            compile_gateware = False
         soc = SDRAMTestSoC(platform, "ddram_" + dw, with_cpu)
     elif sys.argv[1] == "jesd":
         soc = JESDTestSoC(platform)
@@ -700,7 +702,8 @@ def main():
         soc = DRTIOTestSoC(platform, sfp)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
-    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv", compile_gateware=True)
+    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv",
+        compile_gateware=compile_gateware)
     vns = builder.build()
     soc.do_exit(vns)
 
