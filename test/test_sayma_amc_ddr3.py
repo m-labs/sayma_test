@@ -25,7 +25,11 @@ wb.open()
 
 # # #
 
+wb.regs.ddrphy_rst.write(1)
+wb.regs.ddrphy_rst.write(0)
+
 wb.regs.sdram_dfii_control.write(0)
+time.sleep(0.1)
 
 # release reset
 wb.regs.sdram_dfii_pi0_address.write(0x0)
@@ -46,13 +50,13 @@ wb.regs.sdram_dfii_pi0_command.write(dfii_command_ras|dfii_command_cas|dfii_comm
 wb.regs.sdram_dfii_pi0_command_issue.write(1)
 
 # load mode register 3
-wb.regs.sdram_dfii_pi0_address.write(0x0)
+wb.regs.sdram_dfii_pi0_address.write(0x000)
 wb.regs.sdram_dfii_pi0_baddress.write(3)
 wb.regs.sdram_dfii_pi0_command.write(dfii_command_ras|dfii_command_cas|dfii_command_we|dfii_command_cs)
 wb.regs.sdram_dfii_pi0_command_issue.write(1)
 
 # load mode register 1
-wb.regs.sdram_dfii_pi0_address.write(0x6);
+wb.regs.sdram_dfii_pi0_address.write(0x006);
 wb.regs.sdram_dfii_pi0_baddress.write(1);
 wb.regs.sdram_dfii_pi0_command.write(dfii_command_ras|dfii_command_cas|dfii_command_we|dfii_command_cs)
 wb.regs.sdram_dfii_pi0_command_issue.write(1)
@@ -73,30 +77,6 @@ time.sleep(0.1)
 
 # hardware control
 wb.regs.sdram_dfii_control.write(dfii_control_sel)
-
-def seed_to_data(seed, random=True):
-    if random:
-        return (1664525*seed + 1013904223) & 0xffffffff
-    else:
-        return seed
-
-def write_pattern(length):
-    for i in range(length):
-        wb.write(wb.mems.main_ram.base + 4*i, seed_to_data(i))
-
-def check_pattern(length, debug=False):
-    errors = 0
-    for i in range(length):
-        error = 0
-        if wb.read(wb.mems.main_ram.base + 4*i) != seed_to_data(i):
-            error = 1
-            if debug:
-                print("{}: 0x{:08x}, 0x{:08x} KO".format(i, wb.read(wb.mems.main_ram.base + 4*i), seed_to_data(i)))
-        else:
-            if debug:
-                print("{}: 0x{:08x}, 0x{:08x} OK".format(i, wb.read(wb.mems.main_ram.base + 4*i), seed_to_data(i)))
-        errors += error
-    return errors
 
 #
 
@@ -150,12 +130,6 @@ groups = {
 analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
 analyzer.configure_group(groups["dfi_phase0"])
 analyzer.configure_trigger(cond={})
-
-# configure bitslip (check if working with analyzer)
-bitslip = 0
-for i in range(32//8):
-    wb.regs.ddrphy_dly_sel.write(1<<i)
-    wb.regs.ddrphy_rdly_dq_bitslip.write(bitslip)
 
 write_test(0x00000000, 1024*MB, False)
 #read_test(0x00000000, 1024*MB, False)

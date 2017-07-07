@@ -58,14 +58,14 @@ _io = [
         Subsignal("a", Pins(
             "AE17 AL17 AG16 AG17 AD16 AH14 AD15 AK15",
             "AF14 AF15 AL18 AL15 AE18 AJ15 AG14"),
-            IOStandard("SSTL15")),
-        Subsignal("ba", Pins("AF17 AD19 AD18"), IOStandard("SSTL15")),
-        Subsignal("ras_n", Pins("AH19"), IOStandard("SSTL15")),
-        Subsignal("cas_n", Pins("AK18"), IOStandard("SSTL15")),
-        Subsignal("we_n", Pins("AG19"), IOStandard("SSTL15")),
-        Subsignal("cs_n", Pins("AF18"), IOStandard("SSTL15")),
+            IOStandard("SSTL15_DCI")),
+        Subsignal("ba", Pins("AF17 AD19 AD18"), IOStandard("SSTL15_DCI")),
+        Subsignal("ras_n", Pins("AH19"), IOStandard("SSTL15_DCI")),
+        Subsignal("cas_n", Pins("AK18"), IOStandard("SSTL15_DCI")),
+        Subsignal("we_n", Pins("AG19"), IOStandard("SSTL15_DCI")),
+        Subsignal("cs_n", Pins("AF18"), IOStandard("SSTL15_DCI")),
         Subsignal("dm", Pins("AD21 AE25 AJ21 AM21 AH26 AN26 AJ29 AL32"),
-            IOStandard("SSTL15")),
+            IOStandard("SSTL15_DCI")),
         Subsignal("dq", Pins(
             "AE23 AG20 AF22 AF20 AE22 AD20 AG22 AE20",
             "AJ24 AG24 AJ23 AF23 AH23 AF24 AH22 AG25",
@@ -77,70 +77,76 @@ _io = [
             "AN33 AP33 AM34 AP31 AM32 AN31 AL34 AN32"),
             IOStandard("SSTL15_DCI")),
         Subsignal("dqs_p", Pins("AG21 AH24 AJ20 AP20 AL27 AN29 AH33 AN34"),
-            IOStandard("DIFF_SSTL15")),
+            IOStandard("DIFF_SSTL15_DCI")),
         Subsignal("dqs_n", Pins("AH21 AJ25 AK20 AP21 AL28 AP30 AJ33 AP34"),
-            IOStandard("DIFF_SSTL15")),
-        Subsignal("clk_p", Pins("AE16"), IOStandard("DIFF_SSTL15")),
-        Subsignal("clk_n", Pins("AE15"), IOStandard("DIFF_SSTL15")),
-        Subsignal("cke", Pins("AL19"), IOStandard("SSTL15")),
-        Subsignal("odt", Pins("AJ18"), IOStandard("SSTL15")),
-        Subsignal("reset_n", Pins("AJ14"), IOStandard("LVCMOS15"))
+            IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("clk_p", Pins("AE16"), IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("clk_n", Pins("AE15"), IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("cke", Pins("AL19"), IOStandard("SSTL15_DCI")),
+        Subsignal("odt", Pins("AJ18"), IOStandard("SSTL15_DCI")),
+        Subsignal("reset_n", Pins("AJ14"), IOStandard("SSTL15")),
+        Misc("SLEW=FAST"),
+        Misc("OUTPUT_IMPEDANCE=RDRV_40_40"),
     ),
 
     ("ddram_32", 1,
         Subsignal("a", Pins(
             "E15 D15 J16 K18 H16 K17 K16 J15",
             "K15 D14 D18 G15 L18 G14 L15"),
-            IOStandard("SSTL15")),
-        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15")),
-        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15")),
-        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15")),
-        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15")),
-        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15")),
+            IOStandard("SSTL15_DCI")),
+        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15_DCI")),
+        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15_DCI")),
+        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15_DCI")),
+        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15_DCI")),
+        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15_DCI")),
         Subsignal("dm", Pins("F27 E26 D23 G24"),
-            IOStandard("SSTL15")),
+            IOStandard("SSTL15_DCI")),
         Subsignal("dq", Pins(
             "C28 B27 A27 C27 D28 E28 A28 D29",
             "D25 C26 E25 B25 C24 A25 D24 B26",
             "B20 D21 B22 E23 E22 D20 B21 A20",
             "F23 H21 F24 G21 F22 E21 G22 E20"),
-            IOStandard("SSTL15_DCI")),
+            IOStandard("SSTL15_DCI_DCI")),
         Subsignal("dqs_p", Pins("B29 B24 C21 G20"),
-            IOStandard("DIFF_SSTL15")),
+            IOStandard("DIFF_SSTL15_DCI")),
         Subsignal("dqs_n", Pins("A29 A24 C22 F20"),
-            IOStandard("DIFF_SSTL15")),
-        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15")),
-        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15")),
-        Subsignal("cke", Pins("H18"), IOStandard("SSTL15")),
-        Subsignal("odt", Pins("F19"), IOStandard("SSTL15")),
-        Subsignal("reset_n", Pins("F14"), IOStandard("LVCMOS15"))
+            IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("cke", Pins("H18"), IOStandard("SSTL15_DCI")),
+        Subsignal("odt", Pins("F19"), IOStandard("SSTL15_DCI")),
+        Subsignal("reset_n", Pins("F14"), IOStandard("SSTL15")),
+        Misc("SLEW=FAST"),
+        Misc("OUTPUT_IMPEDANCE=RDRV_40_40"),
     ),
 
     ("ddram_16", 1,
         Subsignal("a", Pins(
             "E15 D15 J16 K18 H16 K17 K16 J15",
             "K15 D14 D18 G15 L18 G14 L15"),
-            IOStandard("SSTL15")),
-        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15")),
-        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15")),
-        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15")),
-        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15")),
-        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15")),
+            IOStandard("SSTL15_DCI")),
+        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15_DCI")),
+        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15_DCI")),
+        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15_DCI")),
+        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15_DCI")),
+        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15_DCI")),
         Subsignal("dm", Pins("F27 E26"),
-            IOStandard("SSTL15")),
+            IOStandard("SSTL15_DCI")),
         Subsignal("dq", Pins(
             "C28 B27 A27 C27 D28 E28 A28 D29",
             "D25 C26 E25 B25 C24 A25 D24 B26"),
             IOStandard("SSTL15_DCI")),
         Subsignal("dqs_p", Pins("B29 B24"),
-            IOStandard("DIFF_SSTL15")),
+            IOStandard("DIFF_SSTL15_DCI")),
         Subsignal("dqs_n", Pins("A29 A24"),
-            IOStandard("DIFF_SSTL15")),
-        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15")),
-        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15")),
-        Subsignal("cke", Pins("H18"), IOStandard("SSTL15")),
-        Subsignal("odt", Pins("F19"), IOStandard("SSTL15")),
-        Subsignal("reset_n", Pins("F14"), IOStandard("LVCMOS15"))
+            IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15_DCI")),
+        Subsignal("cke", Pins("H18"), IOStandard("SSTL15_DCI")),
+        Subsignal("odt", Pins("F19"), IOStandard("SSTL15_DCI")),
+        Subsignal("reset_n", Pins("F14"), IOStandard("SSTL15")),
+        Misc("SLEW=FAST"),
+        Misc("OUTPUT_IMPEDANCE=RDRV_40_40"),
     ),
 
     # dac
@@ -233,6 +239,8 @@ class Platform(XilinxPlatform):
 
     def __init__(self):
         XilinxPlatform.__init__(self, "xcku040-ffva1156-1-c", _io, toolchain="vivado")
+        self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 67]")
+        self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 68]")
 
 
 class _CRG(Module):
@@ -264,11 +272,7 @@ class _CRG(Module):
                      p_CLKOUT1_DIVIDE=2, p_CLKOUT1_PHASE=0.0, o_CLKOUT1=pll_sys4x,
 
                      # 200MHz
-                     p_CLKOUT2_DIVIDE=5, p_CLKOUT2_PHASE=0.0, o_CLKOUT2=pll_clk200,
-
-                     p_CLKOUT3_DIVIDE=2, p_CLKOUT3_PHASE=0.0, #o_CLKOUT3=,
-
-                     p_CLKOUT4_DIVIDE=4, p_CLKOUT4_PHASE=0.0, #o_CLKOUT4=
+                     p_CLKOUT2_DIVIDE=5, p_CLKOUT2_PHASE=0.0, o_CLKOUT2=pll_clk200
             ),
             Instance("BUFG", i_I=self.pll_sys, o_O=self.cd_sys.clk),
             Instance("BUFG", i_I=pll_sys4x, o_O=self.cd_sys4x.clk),
@@ -322,7 +326,7 @@ class SDRAMTestSoC(SoCSDRAM):
         self.submodules.crg = _CRG(platform)
         if not with_cpu:
             self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                      clk_freq, baudrate=2e6))
+                                                      clk_freq, baudrate=115200))
             self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
@@ -336,12 +340,12 @@ class SDRAMTestSoC(SoCSDRAM):
                             sdram_module.timing_settings)
 
         # sdram bist
-        generator_user_port = self.sdram.crossbar.get_port(mode="write", dw=32)
+        generator_user_port = self.sdram.crossbar.get_port(mode="write")
         self.submodules.generator = LiteDRAMBISTGenerator(
-            generator_user_port, random=False)
-        checker_user_port = self.sdram.crossbar.get_port(mode="read", dw=32)
+            generator_user_port, random=True)
+        checker_user_port = self.sdram.crossbar.get_port(mode="read")
         self.submodules.checker = LiteDRAMBISTChecker(
-            checker_user_port, random=False)
+            checker_user_port, random=True)
 
         # analyzer
         dfi_phase0_group = [
@@ -447,7 +451,7 @@ class JESDTestSoC(SoCCore):
         )
         self.submodules.crg = _CRG(platform)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=2e6))
+                                                  clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
@@ -532,7 +536,7 @@ class DRTIOTestSoC(SoCCore):
         )
         self.submodules.crg = _CRG(platform)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=2e6))
+                                                  clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
@@ -603,7 +607,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         )
         self.submodules.crg = _CRG(platform)
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=2e6))
+                                                  clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
@@ -696,7 +700,7 @@ def main():
         soc = DRTIOTestSoC(platform, sfp)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
-    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv")
+    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv", compile_gateware=True)
     vns = builder.build()
     soc.do_exit(vns)
 
