@@ -25,11 +25,7 @@ wb.open()
 
 # # #
 
-wb.regs.ddrphy_rst.write(1)
-wb.regs.ddrphy_rst.write(0)
-
 wb.regs.sdram_dfii_control.write(0)
-time.sleep(0.1)
 
 # release reset
 wb.regs.sdram_dfii_pi0_address.write(0x0)
@@ -50,7 +46,7 @@ wb.regs.sdram_dfii_pi0_command.write(dfii_command_ras|dfii_command_cas|dfii_comm
 wb.regs.sdram_dfii_pi0_command_issue.write(1)
 
 # load mode register 3
-wb.regs.sdram_dfii_pi0_address.write(0x000)
+wb.regs.sdram_dfii_pi0_address.write(0x004)
 wb.regs.sdram_dfii_pi0_baddress.write(3)
 wb.regs.sdram_dfii_pi0_command.write(dfii_command_ras|dfii_command_cas|dfii_command_we|dfii_command_cs)
 wb.regs.sdram_dfii_pi0_command_issue.write(1)
@@ -132,7 +128,7 @@ analyzer.configure_group(groups["dfi_phase0"])
 analyzer.configure_trigger(cond={})
 
 write_test(0x00000000, 1024*MB, False)
-#read_test(0x00000000, 1024*MB, False)
+read_test(0x00000000, 1024*MB, False)
 
 analyzer.run(offset=32, length=64)
 

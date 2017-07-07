@@ -93,60 +93,68 @@ _io = [
         Subsignal("a", Pins(
             "E15 D15 J16 K18 H16 K17 K16 J15",
             "K15 D14 D18 G15 L18 G14 L15"),
-            IOStandard("SSTL15_DCI")),
-        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15_DCI")),
-        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15_DCI")),
-        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15_DCI")),
-        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15_DCI")),
-        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15_DCI")),
+            IOStandard("SSTL15")),
+        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15")),
+        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15")),
+        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15")),
+        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15")),
+        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15")),
         Subsignal("dm", Pins("F27 E26 D23 G24"),
-            IOStandard("SSTL15_DCI")),
+            IOStandard("SSTL15"),
+            Misc("DATA_RATE=DDR")),
         Subsignal("dq", Pins(
             "C28 B27 A27 C27 D28 E28 A28 D29",
             "D25 C26 E25 B25 C24 A25 D24 B26",
             "B20 D21 B22 E23 E22 D20 B21 A20",
             "F23 H21 F24 G21 F22 E21 G22 E20"),
-            IOStandard("SSTL15_DCI_DCI")),
+            IOStandard("SSTL15_DCI"),
+            Misc("ODT=RTT_40"),
+            Misc("DATA_RATE=DDR")),
         Subsignal("dqs_p", Pins("B29 B24 C21 G20"),
-            IOStandard("DIFF_SSTL15_DCI")),
+            IOStandard("DIFF_SSTL15"),
+            Misc("DATA_RATE=DDR")),
         Subsignal("dqs_n", Pins("A29 A24 C22 F20"),
-            IOStandard("DIFF_SSTL15_DCI")),
-        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15_DCI")),
-        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15_DCI")),
-        Subsignal("cke", Pins("H18"), IOStandard("SSTL15_DCI")),
-        Subsignal("odt", Pins("F19"), IOStandard("SSTL15_DCI")),
-        Subsignal("reset_n", Pins("F14"), IOStandard("SSTL15")),
+            IOStandard("DIFF_SSTL15"),
+            Misc("DATA_RATE=DDR")),
+        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15"), Misc("DATA_RATE=DDR")),
+        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15"), Misc("DATA_RATE=DDR")),
+        Subsignal("cke", Pins("H18"), IOStandard("SSTL15")),
+        Subsignal("odt", Pins("F19"), IOStandard("SSTL15")),
+        Subsignal("reset_n", Pins("F14"), IOStandard("LVCMOS15")),
         Misc("SLEW=FAST"),
-        Misc("OUTPUT_IMPEDANCE=RDRV_40_40"),
     ),
 
     ("ddram_16", 1,
         Subsignal("a", Pins(
             "E15 D15 J16 K18 H16 K17 K16 J15",
             "K15 D14 D18 G15 L18 G14 L15"),
-            IOStandard("SSTL15_DCI")),
-        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15_DCI")),
-        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15_DCI")),
-        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15_DCI")),
-        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15_DCI")),
-        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15_DCI")),
+            IOStandard("SSTL15")),
+        Subsignal("ba", Pins("L19 H17 G16"), IOStandard("SSTL15")),
+        Subsignal("ras_n", Pins("E18"), IOStandard("SSTL15")),
+        Subsignal("cas_n", Pins("E16"), IOStandard("SSTL15")),
+        Subsignal("we_n", Pins("D16"), IOStandard("SSTL15")),
+        Subsignal("cs_n", Pins("G19"), IOStandard("SSTL15")),
         Subsignal("dm", Pins("F27 E26"),
-            IOStandard("SSTL15_DCI")),
+            IOStandard("SSTL15"),
+            Misc("DATA_RATE=DDR")),
         Subsignal("dq", Pins(
             "C28 B27 A27 C27 D28 E28 A28 D29",
             "D25 C26 E25 B25 C24 A25 D24 B26"),
-            IOStandard("SSTL15_DCI")),
+            IOStandard("SSTL15_DCI"),
+            Misc("ODT=RTT_40"),
+            Misc("DATA_RATE=DDR")),
         Subsignal("dqs_p", Pins("B29 B24"),
-            IOStandard("DIFF_SSTL15_DCI")),
+            IOStandard("DIFF_SSTL15"),
+            Misc("DATA_RATE=DDR")),
         Subsignal("dqs_n", Pins("A29 A24"),
-            IOStandard("DIFF_SSTL15_DCI")),
-        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15_DCI")),
-        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15_DCI")),
-        Subsignal("cke", Pins("H18"), IOStandard("SSTL15_DCI")),
-        Subsignal("odt", Pins("F19"), IOStandard("SSTL15_DCI")),
-        Subsignal("reset_n", Pins("F14"), IOStandard("SSTL15")),
+            IOStandard("DIFF_SSTL15"),
+            Misc("DATA_RATE=DDR")),
+        Subsignal("clk_p", Pins("J19"), IOStandard("DIFF_SSTL15"), Misc("DATA_RATE=DDR")),
+        Subsignal("clk_n", Pins("J18"), IOStandard("DIFF_SSTL15"), Misc("DATA_RATE=DDR")),
+        Subsignal("cke", Pins("H18"), IOStandard("SSTL15")),
+        Subsignal("odt", Pins("F19"), IOStandard("SSTL15")),
+        Subsignal("reset_n", Pins("F14"), IOStandard("LVCMOS15")),
         Misc("SLEW=FAST"),
-        Misc("OUTPUT_IMPEDANCE=RDRV_40_40"),
     ),
 
     # dac
@@ -239,8 +247,8 @@ class Platform(XilinxPlatform):
 
     def __init__(self):
         XilinxPlatform.__init__(self, "xcku040-ffva1156-1-c", _io, toolchain="vivado")
-        self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 67]")
-        self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 68]")
+        #self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 67]")
+        #self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 68]")
 
 
 class _CRG(Module):
@@ -419,7 +427,7 @@ class SDRAMTestSoC(SoCSDRAM):
             3 : dfi_phase3_group
         }
         if not with_cpu:
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512)
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 64)
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):
