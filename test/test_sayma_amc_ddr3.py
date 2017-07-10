@@ -163,9 +163,10 @@ def bruteforce_delay_finder():
     for bitslip in bitslip_range:
         print("bitslip {:d}: |".format(bitslip), end="")
         for module in range(nmodules):
-            wb.regs.ddrphy_dly_sel.write(1<<module)
-            wb.regs.ddrphy_rdly_dq_bitslip.write(bitslip)
+            wb.regs.ddrphy_dly_sel.write(1<<module)          
             wb.regs.ddrphy_rdly_dq_rst.write(1)
+            for i in range(bitslip):
+                wb.regs.ddrphy_rdly_dq_bitslip.write(1)
         for delay in delay_range:
             for module in range(nmodules):
                 wb.regs.ddrphy_dly_sel.write(1<<module)
@@ -212,7 +213,8 @@ def bist(test_base, test_length, test_increment):
     # configure bitslip
     for module in range(nmodules):
         wb.regs.ddrphy_dly_sel.write(1<<module)
-        wb.regs.ddrphy_rdly_dq_bitslip.write(bitslip)
+        for i in range(bitslip):
+            wb.regs.ddrphy_rdly_dq_bitslip.write(1)
 
 
     # verify we are able to detect errors
