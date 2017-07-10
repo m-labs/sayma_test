@@ -576,7 +576,7 @@ int sdrlevel(void)
 
 	if(!write_level(delay, high_skew))
 		return 0;
-	//read_bitslip(delay, high_skew);
+	read_bitslip(delay, high_skew);
 	read_delays();
 
 	return 1;
