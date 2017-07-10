@@ -358,7 +358,7 @@ class SDRAMTestSoC(SoCSDRAM):
         self.register_mem("firmware_ram", self.mem_map["firmware_ram"], self.firmware_ram.bus, firmware_ram_size)
         self.add_constant("ROM_BOOT_ADDRESS", self.mem_map["firmware_ram"])
 
-        # sdram 
+        # sdram
         self.submodules.ddrphy = kusddrphy.KUSDDRPHY(platform.request(ddram))
         sdram_module = MT41J256M16(self.clk_freq, "1:4")
         self.register_sdram(self.ddrphy,
@@ -366,86 +366,88 @@ class SDRAMTestSoC(SoCSDRAM):
                             sdram_module.timing_settings)
 
         # sdram bist
-        generator_user_port = self.sdram.crossbar.get_port(mode="write")
-        self.submodules.generator = LiteDRAMBISTGenerator(
-            generator_user_port, random=True)
-        checker_user_port = self.sdram.crossbar.get_port(mode="read")
-        self.submodules.checker = LiteDRAMBISTChecker(
-            checker_user_port, random=True)
+        if not with_cpu:
+            generator_user_port = self.sdram.crossbar.get_port(mode="write")
+            self.submodules.generator = LiteDRAMBISTGenerator(
+                generator_user_port, random=True)
+            checker_user_port = self.sdram.crossbar.get_port(mode="read")
+            self.submodules.checker = LiteDRAMBISTChecker(
+                checker_user_port, random=True)
 
         # analyzer
-        dfi_phase0_group = [
-            self.ddrphy.dfi.phases[0].address,
-            self.ddrphy.dfi.phases[0].bank,
-            self.ddrphy.dfi.phases[0].ras_n,
-            self.ddrphy.dfi.phases[0].cas_n,
-            self.ddrphy.dfi.phases[0].we_n,
-            self.ddrphy.dfi.phases[0].cs_n,
-            self.ddrphy.dfi.phases[0].cke,
-            self.ddrphy.dfi.phases[0].odt,
-            self.ddrphy.dfi.phases[0].reset_n,
-            self.ddrphy.dfi.phases[0].wrdata_en,
-            self.ddrphy.dfi.phases[0].wrdata_mask,
-            self.ddrphy.dfi.phases[0].wrdata,
-            self.ddrphy.dfi.phases[0].rddata,
-            self.ddrphy.dfi.phases[0].rddata_valid
-        ]
-        dfi_phase1_group = [
-            self.ddrphy.dfi.phases[1].address,
-            self.ddrphy.dfi.phases[1].bank,
-            self.ddrphy.dfi.phases[1].ras_n,
-            self.ddrphy.dfi.phases[1].cas_n,
-            self.ddrphy.dfi.phases[1].we_n,
-            self.ddrphy.dfi.phases[1].cs_n,
-            self.ddrphy.dfi.phases[1].cke,
-            self.ddrphy.dfi.phases[1].odt,
-            self.ddrphy.dfi.phases[1].reset_n,
-            self.ddrphy.dfi.phases[1].wrdata_en,
-            self.ddrphy.dfi.phases[1].wrdata_mask,
-            self.ddrphy.dfi.phases[1].wrdata,
-            self.ddrphy.dfi.phases[1].rddata,
-            self.ddrphy.dfi.phases[1].rddata_valid
-        ]
-        dfi_phase2_group = [
-            self.ddrphy.dfi.phases[2].address,
-            self.ddrphy.dfi.phases[2].bank,
-            self.ddrphy.dfi.phases[2].ras_n,
-            self.ddrphy.dfi.phases[2].cas_n,
-            self.ddrphy.dfi.phases[2].we_n,
-            self.ddrphy.dfi.phases[2].cs_n,
-            self.ddrphy.dfi.phases[2].cke,
-            self.ddrphy.dfi.phases[2].odt,
-            self.ddrphy.dfi.phases[2].reset_n,
-            self.ddrphy.dfi.phases[2].wrdata_en,
-            self.ddrphy.dfi.phases[2].wrdata_mask,
-            self.ddrphy.dfi.phases[2].wrdata,
-            self.ddrphy.dfi.phases[2].rddata,
-            self.ddrphy.dfi.phases[2].rddata_valid
-        ]
-        dfi_phase3_group = [
-            self.ddrphy.dfi.phases[3].address,
-            self.ddrphy.dfi.phases[3].bank,
-            self.ddrphy.dfi.phases[3].ras_n,
-            self.ddrphy.dfi.phases[3].cas_n,
-            self.ddrphy.dfi.phases[3].we_n,
-            self.ddrphy.dfi.phases[3].cs_n,
-            self.ddrphy.dfi.phases[3].cke,
-            self.ddrphy.dfi.phases[3].odt,
-            self.ddrphy.dfi.phases[3].reset_n,
-            self.ddrphy.dfi.phases[3].wrdata_en,
-            self.ddrphy.dfi.phases[3].wrdata_mask,
-            self.ddrphy.dfi.phases[3].wrdata,
-            self.ddrphy.dfi.phases[3].rddata,
-            self.ddrphy.dfi.phases[3].rddata_valid
-        ]
-        analyzer_signals = {
-            0 : dfi_phase0_group,
-            1 : dfi_phase1_group,
-            2 : dfi_phase2_group,
-            3 : dfi_phase3_group
-        }
         if not with_cpu:
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 64)
+            dfi_phase0_group = [
+                self.ddrphy.dfi.phases[0].address,
+                self.ddrphy.dfi.phases[0].bank,
+                self.ddrphy.dfi.phases[0].ras_n,
+                self.ddrphy.dfi.phases[0].cas_n,
+                self.ddrphy.dfi.phases[0].we_n,
+                self.ddrphy.dfi.phases[0].cs_n,
+                self.ddrphy.dfi.phases[0].cke,
+                self.ddrphy.dfi.phases[0].odt,
+                self.ddrphy.dfi.phases[0].reset_n,
+                self.ddrphy.dfi.phases[0].wrdata_en,
+                self.ddrphy.dfi.phases[0].wrdata_mask,
+                self.ddrphy.dfi.phases[0].wrdata,
+                self.ddrphy.dfi.phases[0].rddata,
+                self.ddrphy.dfi.phases[0].rddata_valid
+            ]
+            dfi_phase1_group = [
+                self.ddrphy.dfi.phases[1].address,
+                self.ddrphy.dfi.phases[1].bank,
+                self.ddrphy.dfi.phases[1].ras_n,
+                self.ddrphy.dfi.phases[1].cas_n,
+                self.ddrphy.dfi.phases[1].we_n,
+                self.ddrphy.dfi.phases[1].cs_n,
+                self.ddrphy.dfi.phases[1].cke,
+                self.ddrphy.dfi.phases[1].odt,
+                self.ddrphy.dfi.phases[1].reset_n,
+                self.ddrphy.dfi.phases[1].wrdata_en,
+                self.ddrphy.dfi.phases[1].wrdata_mask,
+                self.ddrphy.dfi.phases[1].wrdata,
+                self.ddrphy.dfi.phases[1].rddata,
+                self.ddrphy.dfi.phases[1].rddata_valid
+            ]
+            dfi_phase2_group = [
+                self.ddrphy.dfi.phases[2].address,
+                self.ddrphy.dfi.phases[2].bank,
+                self.ddrphy.dfi.phases[2].ras_n,
+                self.ddrphy.dfi.phases[2].cas_n,
+                self.ddrphy.dfi.phases[2].we_n,
+                self.ddrphy.dfi.phases[2].cs_n,
+                self.ddrphy.dfi.phases[2].cke,
+                self.ddrphy.dfi.phases[2].odt,
+                self.ddrphy.dfi.phases[2].reset_n,
+                self.ddrphy.dfi.phases[2].wrdata_en,
+                self.ddrphy.dfi.phases[2].wrdata_mask,
+                self.ddrphy.dfi.phases[2].wrdata,
+                self.ddrphy.dfi.phases[2].rddata,
+                self.ddrphy.dfi.phases[2].rddata_valid
+            ]
+            dfi_phase3_group = [
+                self.ddrphy.dfi.phases[3].address,
+                self.ddrphy.dfi.phases[3].bank,
+                self.ddrphy.dfi.phases[3].ras_n,
+                self.ddrphy.dfi.phases[3].cas_n,
+                self.ddrphy.dfi.phases[3].we_n,
+                self.ddrphy.dfi.phases[3].cs_n,
+                self.ddrphy.dfi.phases[3].cke,
+                self.ddrphy.dfi.phases[3].odt,
+                self.ddrphy.dfi.phases[3].reset_n,
+                self.ddrphy.dfi.phases[3].wrdata_en,
+                self.ddrphy.dfi.phases[3].wrdata_mask,
+                self.ddrphy.dfi.phases[3].wrdata,
+                self.ddrphy.dfi.phases[3].rddata,
+                self.ddrphy.dfi.phases[3].rddata_valid
+            ]
+            analyzer_signals = {
+                0 : dfi_phase0_group,
+                1 : dfi_phase1_group,
+                2 : dfi_phase2_group,
+                3 : dfi_phase3_group
+            }
+            if not with_cpu:
+                self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 64)
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):
@@ -708,7 +710,7 @@ def main():
     platform = Platform()
     compile_gateware = True
     if len(sys.argv) < 2:
-        print("missing target (sdram or jesd or drtio or amc_rtm_link)")
+        print("missing target (ddram or jesd or drtio or amc_rtm_link)")
         exit()
     if sys.argv[1] == "ddram":
         dw = "32"
