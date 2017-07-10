@@ -28,6 +28,8 @@ from litejesd204b.core import LiteJESD204BCoreTXControl
 from transceiver.gth_ultrascale import GTHChannelPLL, GTH
 from transceiver.serdes_ultrascale import SERDESPLL, SERDES
 
+from gateware import firmware
+
 from litescope import LiteScopeAnalyzer
 
 
@@ -323,6 +325,11 @@ class SDRAMTestSoC(SoCSDRAM):
     }
     csr_map.update(SoCSDRAM.csr_map)
 
+    mem_map = {
+        "firmware_ram": 0x20000000,
+    }
+    mem_map.update(SoCSDRAM.mem_map)
+
     def __init__(self, platform, ddram="ddram_32", with_cpu=False):
         clk_freq = int(125e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
@@ -331,7 +338,7 @@ class SDRAMTestSoC(SoCSDRAM):
             integrated_sram_size=0x8000 if with_cpu else 0,
             csr_data_width=32,
             l2_size=128,
-            with_uart=with_cpu, uart_stub=True,
+            with_uart=with_cpu, uart_stub=False,
             ident="Sayma AMC SDRAM Test Design",
             with_timer=with_cpu
         )
@@ -343,6 +350,13 @@ class SDRAMTestSoC(SoCSDRAM):
 
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
+
+        # firmware
+        firmware_ram_size = 0x10000
+        firmware_filename = "firmware/firmware.bin"
+        self.submodules.firmware_ram = firmware.FirmwareROM(firmware_ram_size, firmware_filename)
+        self.register_mem("firmware_ram", self.mem_map["firmware_ram"], self.firmware_ram.bus, firmware_ram_size)
+        self.add_constant("ROM_BOOT_ADDRESS", self.mem_map["firmware_ram"])
 
         # sdram 
         self.submodules.ddrphy = kusddrphy.KUSDDRPHY(platform.request(ddram))
@@ -703,7 +717,7 @@ def main():
             dw = sys.argv[2]
         if len(sys.argv) > 3:
             with_cpu = bool(sys.argv[3])
-            compile_gateware = False
+            #compile_gateware = False
         soc = SDRAMTestSoC(platform, "ddram_" + dw, with_cpu)
     elif sys.argv[1] == "jesd":
         soc = JESDTestSoC(platform)
