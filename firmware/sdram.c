@@ -247,7 +247,7 @@ static int write_level(int *delay, int *high_skew)
 				delay[i]++;
 				if(delay[i] >= ERR_DDRPHY_DELAY)
 					break;
-				//ddrphy_wdly_dq_inc_write(1); FIXME
+				ddrphy_wdly_dq_inc_write(1);
 				ddrphy_wdly_dqs_inc_write(1);
 				ddrphy_wlevel_strobe_write(1);
 				cdelay(10);
@@ -260,7 +260,7 @@ static int write_level(int *delay, int *high_skew)
 			delay[i]++;
 			if(delay[i] >= ERR_DDRPHY_DELAY)
 				break;
-			//ddrphy_wdly_dq_inc_write(1); FIXME
+			ddrphy_wdly_dq_inc_write(1);
 			ddrphy_wdly_dqs_inc_write(1);
 
 			ddrphy_wlevel_strobe_write(1);
@@ -368,8 +368,10 @@ static void read_delays(void)
 		delay_min = delay;
 
 		/* Get a bit further into the working zone */
-		delay++;
-		ddrphy_rdly_dq_inc_write(1);
+		for(j=0;j<8;j++) {
+			delay += 1;
+			ddrphy_rdly_dq_inc_write(1);
+		}
 
 		/* Find largest working delay */
 		while(1) {
