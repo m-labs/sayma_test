@@ -3,7 +3,7 @@ SAYMA_AMC_DIR=../build_sayma_amc/
 include $(SAYMA_AMC_DIR)/software/include/generated/variables.mak
 include $(SOC_DIRECTORY)/software/common.mak
 
-OBJECTS=isr.o main.o
+OBJECTS=isr.o sdram.o main.o
 
 all: firmware.bin
 

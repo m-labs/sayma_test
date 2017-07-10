@@ -336,7 +336,7 @@ class SDRAMTestSoC(SoCSDRAM):
             cpu_type="lm32" if with_cpu else None,
             integrated_rom_size=0x8000 if with_cpu else 0,
             integrated_sram_size=0x8000 if with_cpu else 0,
-            csr_data_width=32,
+            csr_data_width=8 if with_cpu else 32,
             l2_size=128,
             with_uart=with_cpu, uart_stub=False,
             ident="Sayma AMC SDRAM Test Design",
