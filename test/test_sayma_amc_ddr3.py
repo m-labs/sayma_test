@@ -86,8 +86,8 @@ GB = 1024*MB
 def write_test(base, length, blocking=True):
     wb.regs.generator_reset.write(1)
     wb.regs.generator_reset.write(0)
-    wb.regs.generator_base.write(base) # FIXME in bytes
-    wb.regs.generator_length.write((length*8)//128) # FIXME in bytes
+    wb.regs.generator_base.write(base)
+    wb.regs.generator_length.write(length)
     wb.regs.generator_start.write(1)
     if blocking:
         while(not wb.regs.generator_done.read()):
@@ -101,8 +101,8 @@ def write_test(base, length, blocking=True):
 def read_test(base, length, blocking=True):
     wb.regs.checker_reset.write(1)
     wb.regs.checker_reset.write(0)
-    wb.regs.checker_base.write(base) # FIXME in bytes
-    wb.regs.checker_length.write((length*8)//128) # FIXME in bytes
+    wb.regs.checker_base.write(base)
+    wb.regs.checker_length.write(length)
     start = time.time()
     wb.regs.checker_start.write(1)
     if blocking:
