@@ -235,14 +235,22 @@ _io = [
 
 
     # amc_rtm_link
-    ("amc_rtm_link", 0,
-        Subsignal("clk_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("clk_n", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("tx_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("tx_n", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("rx_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("rx_n", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        IOStandard("LVDS_25"),
+    ("amc_rtm_link_master", 0,
+        Subsignal("clk_p", Pins("J8"), IOStandard("LVDS")), # rtm_fpga_usr_io_p
+        Subsignal("clk_n", Pins("H8"), IOStandard("LVDS")), # rtm_fpga_usr_io_n
+        Subsignal("tx_p", Pins("E10"), IOStandard("LVDS")), # adc2_sync_p
+        Subsignal("tx_n", Pins("D10"), IOStandard("LVDS")), # adc2_sync_n
+        Subsignal("rx_p", Pins("C11"), IOStandard("LVDS")), # fpga_adc_sysref_p
+        Subsignal("rx_n", Pins("B11"), IOStandard("LVDS")), # fpga_adc_sysref_n
+    ),
+
+    ("amc_rtm_link_slave", 0,
+        Subsignal("clk_p", Pins("AF10"), IOStandard("LVDS_25")), # amc_master_aux_clk_p
+        Subsignal("clk_n", Pins("AG10"), IOStandard("LVDS_25")), # amc_master_aux_clk_n
+        Subsignal("tx_p", Pins("B10"), IOStandard("LVDS")),      # fpga_dac_sysref_p
+        Subsignal("tx_n", Pins("A10"), IOStandard("LVDS")),      # fpga_dac_sysref_n
+        Subsignal("rx_p", Pins("G9"), IOStandard("LVDS")),       # adc1_sync_p
+        Subsignal("rx_n", Pins("F9"), IOStandard("LVDS")),       # adc1_sync_n
     ),
 
 ]
@@ -263,6 +271,7 @@ class _CRG(Module):
         self.clock_domains.cd_clk200 = ClockDomain()
 
         clk50 = platform.request("clk50")
+        clk50_bufr = Signal()
 
         pll_locked = Signal()
         pll_fb = Signal()
@@ -271,13 +280,14 @@ class _CRG(Module):
         pll_sys4x_dqs = Signal()
         pll_clk200 = Signal()
         self.specials += [
+            Instance("BUFR", i_I=clk50, o_O=clk50_bufr),
             Instance("PLLE2_BASE",
                      p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
 
                      # VCO @ 1GHz
                      p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=20.0,
                      p_CLKFBOUT_MULT=20, p_DIVCLK_DIVIDE=1,
-                     i_CLKIN1=clk50, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
+                     i_CLKIN1=clk50_bufr, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
 
                      # 125MHz
                      p_CLKOUT0_DIVIDE=8, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=self.pll_sys,
@@ -298,6 +308,7 @@ class _CRG(Module):
             AsyncResetSynchronizer(self.cd_sys, ~pll_locked),
             AsyncResetSynchronizer(self.cd_clk200, ~pll_locked),
         ]
+        platform.add_platform_command("set_property CLOCK_DEDICATED_ROUTE BACKBONE [get_nets crg_clk50_bufr]")
 
         reset_counter = Signal(4, reset=15)
         ic_reset = Signal(reset=1)
@@ -309,15 +320,6 @@ class _CRG(Module):
             )
         self.specials += Instance("IDELAYCTRL", p_SIM_DEVICE="ULTRASCALE",
             i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
-
-        led_counter = Signal(32)
-        self.sync += led_counter.eq(led_counter + 1)
-        self.comb += [
-            platform.request("user_led", 0).eq(led_counter[26]),
-            platform.request("user_led", 1).eq(led_counter[27]),
-            platform.request("user_led", 2).eq(led_counter[28]),
-            platform.request("user_led", 3).eq(led_counter[29])
-        ]
 
 
 class SDRAMTestSoC(SoCSDRAM):
@@ -377,6 +379,16 @@ class SDRAMTestSoC(SoCSDRAM):
             checker_user_port = self.sdram.crossbar.get_port(mode="read")
             self.submodules.checker = LiteDRAMBISTChecker(
                 checker_user_port, random=True)
+
+        # leds
+        led_counter = Signal(32)
+        self.sync += led_counter.eq(led_counter + 1)
+        self.comb += [
+            platform.request("user_led", 0).eq(led_counter[26]),
+            platform.request("user_led", 1).eq(led_counter[27]),
+            platform.request("user_led", 2).eq(led_counter[28]),
+            platform.request("user_led", 3).eq(led_counter[29])
+        ]
 
         # analyzer
         if not with_cpu:
@@ -624,11 +636,12 @@ class DRTIOTestSoC(SoCCore):
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
         "master_serdes": 20,
-        "analyzer": 22
+        "slave_serdes":  21,
+        "analyzer":      30
     }
     csr_map.update(SoCCore.csr_map)
 
-    def __init__(self, platform, analyzer=True):
+    def __init__(self, platform):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -645,11 +658,12 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
+        # amc rtm link master
         master_pll = SERDESPLL(125e6, 1.25e9)
         self.comb += master_pll.refclk.eq(ClockSignal())
         self.submodules += master_pll
 
-        master_pads = platform.request("amc_rtm_link")
+        master_pads = platform.request("amc_rtm_link_master")
         self.submodules.master_serdes = master_serdes = SERDES(
             master_pll, master_pads, mode="master")
 
@@ -666,29 +680,60 @@ class AMCRTMLinkTestSoC(SoCCore):
             master_serdes.cd_serdes_2p5x.clk)
 
         counter = Signal(32)
-        self.sync.serdes += counter.eq(counter + 1)
+        self.sync.master_serdes_serdes += counter.eq(counter + 1)
         self.comb += [
             master_serdes.encoder.d[0].eq(counter),
             master_serdes.encoder.d[1].eq(counter)
         ]
 
-        master_sys_counter = Signal(32)
-        self.sync.sys += master_sys_counter.eq(master_sys_counter + 1)
-        #self.comb += platform.request("user_led", 0).eq(master_sys_counter[26]) # FIXME
+        # amc rtm link slave (to test master with rtm loopback
+        # until we have rtm board)
+        slave_pll = SERDESPLL(125e6, 1.25e9)
+        self.comb += slave_pll.refclk.eq(ClockSignal())
+        self.submodules += slave_pll
 
+        slave_pads = platform.request("amc_rtm_link_slave")
+        self.submodules.slave_serdes = slave_serdes = SERDES(
+            slave_pll, slave_pads, mode="slave")
+
+        slave_serdes.cd_serdes.clk.attr.add("keep")
+        slave_serdes.cd_serdes_10x.clk.attr.add("keep")
+        slave_serdes.cd_serdes_2p5x.clk.attr.add("keep")
+        platform.add_period_constraint(slave_serdes.cd_serdes.clk, 16.0),
+        platform.add_period_constraint(slave_serdes.cd_serdes_10x.clk, 1.6),
+        platform.add_period_constraint(slave_serdes.cd_serdes_2p5x.clk, 6.4)
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            slave_serdes.cd_serdes.clk,
+            slave_serdes.cd_serdes_10x.clk,
+            slave_serdes.cd_serdes_2p5x.clk)
+
+        counter = Signal(32)
+        self.sync.master_serdes_serdes += counter.eq(counter + 1)
+        self.comb += [
+            slave_serdes.encoder.d[0].eq(counter),
+            slave_serdes.encoder.d[1].eq(counter)
+        ]
+
+        # leds
         master_serdes_counter = Signal(32)
-        self.sync.serdes += master_serdes_counter.eq(master_serdes_counter + 1)
-        #self.comb += platform.request("user_led", 1).eq(master_serdes_counter[26]) # FIXME
+        self.sync.master_serdes_serdes += master_serdes_counter.eq(master_serdes_counter + 1)
+        self.comb += platform.request("user_led", 0).eq(master_serdes_counter[26])
 
         master_serdes_2p5x_counter = Signal(32)
-        self.sync.serdes_2p5x += master_serdes_2p5x_counter.eq(master_serdes_2p5x_counter + 1)
-        #self.comb += platform.request("user_led", 2).eq(master_serdes_2p5x_counter[26]) # FIXME
+        self.sync.master_serdes_serdes_2p5x += master_serdes_2p5x_counter.eq(master_serdes_2p5x_counter + 1)
+        self.comb += platform.request("user_led", 1).eq(master_serdes_2p5x_counter[26])
 
-        master_serdes_10x_counter = Signal(32)
-        self.sync.serdes_10x += master_serdes_10x_counter.eq(master_serdes_10x_counter + 1)
-        #self.comb += platform.request("user_led", 3).eq(master_serdes_10x_counter[26]) # FIXME
+        slave_serdes_counter = Signal(32)
+        self.sync.slave_serdes_serdes += slave_serdes_counter.eq(slave_serdes_counter + 1)
+        self.comb += platform.request("user_led", 2).eq(slave_serdes_counter[26])
 
-        analyzer_signals = [
+        slave_serdes_2p5x_counter = Signal(32)
+        self.sync.slave_serdes_serdes_2p5x += slave_serdes_2p5x_counter.eq(slave_serdes_2p5x_counter + 1)
+        self.comb += platform.request("user_led", 3).eq(slave_serdes_2p5x_counter[26])
+
+        # analyzer
+        master_group = [
             master_serdes.encoder.k[0],
             master_serdes.encoder.d[0],
             master_serdes.encoder.output[0],
@@ -703,7 +748,26 @@ class AMCRTMLinkTestSoC(SoCCore):
             master_serdes.decoders[1].d,
             master_serdes.decoders[1].k
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
+        slave_group = [
+            slave_serdes.encoder.k[0],
+            slave_serdes.encoder.d[0],
+            slave_serdes.encoder.output[0],
+            slave_serdes.encoder.k[1],
+            slave_serdes.encoder.d[1],
+            slave_serdes.encoder.output[1],
+
+            slave_serdes.decoders[0].input,
+            slave_serdes.decoders[0].d,
+            slave_serdes.decoders[0].k,
+            slave_serdes.decoders[1].input,
+            slave_serdes.decoders[1].d,
+            slave_serdes.decoders[1].k
+        ]
+        analyzer_signals = {
+            0 : master_group,
+            1 : slave_group
+        }
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="master_serdes_serdes")
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):

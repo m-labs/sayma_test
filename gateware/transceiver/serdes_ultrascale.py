@@ -21,7 +21,7 @@ class SERDESPLL(Module):
         self.serdes_2p5x_clk = Signal()
 
         # refclk: 125MHz
-        # pll vco: 1250MHz
+        # pll vco: 625MHz
         # serdes: 62.5MHz
         # serdes_10x = 625MHz
         # serdes_2p5x = 156.25MHz
@@ -36,22 +36,22 @@ class SERDESPLL(Module):
             Instance("PLLE2_BASE",
                 p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
 
-                # VCO @ 1.25GHz
+                # VCO @ 625MHz
                 p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=8.0,
-                p_CLKFBOUT_MULT=10, p_DIVCLK_DIVIDE=1,
+                p_CLKFBOUT_MULT=5, p_DIVCLK_DIVIDE=1,
                 i_CLKIN1=self.refclk, i_CLKFBIN=pll_fb,
                 o_CLKFBOUT=pll_fb,
 
                 # 62.5MHz: serdes
-                p_CLKOUT0_DIVIDE=20, p_CLKOUT0_PHASE=0.0,
+                p_CLKOUT0_DIVIDE=10, p_CLKOUT0_PHASE=0.0,
                 o_CLKOUT0=pll_serdes_clk,
 
                 # 625MHz: serdes_10x
-                p_CLKOUT1_DIVIDE=2, p_CLKOUT1_PHASE=0.0,
+                p_CLKOUT1_DIVIDE=1, p_CLKOUT1_PHASE=0.0,
                 o_CLKOUT1=pll_serdes_10x_clk,
 
                 # 156.25MHz: serdes_2p5x
-                p_CLKOUT2_DIVIDE=8, p_CLKOUT2_PHASE=0.0,
+                p_CLKOUT2_DIVIDE=4, p_CLKOUT2_PHASE=0.0,
                 o_CLKOUT2=pll_serdes_2p5x_clk
             ),
             Instance("BUFG", i_I=pll_serdes_clk, o_O=self.serdes_clk),
