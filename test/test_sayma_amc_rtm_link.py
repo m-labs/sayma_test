@@ -15,6 +15,44 @@ wb.open()
 too_late = 0x1
 too_early = 0x2
 
+def amc_rtm_link_delay():
+    # find slave delay
+    print("slave delay:")
+    wb.regs.slave_serdes_rx_delay_rst.write(1)
+    wb.regs.slave_serdes_rx_delay_inc.write(1)
+    slave_delay = None
+    for i in range(512):
+        wb.regs.slave_serdes_phase_detector_reset.write(1)
+        status = wb.regs.slave_serdes_phase_detector_status.read() 
+        if (status & too_early):
+            print("-", end="")
+        elif (status & too_late):
+            print("+", end="")
+        else:
+            print(".", end="")
+        sys.stdout.flush()
+        wb.regs.slave_serdes_rx_delay_ce.write(1)
+    print("")
+
+    # find master delay
+    print("master delay:")
+    wb.regs.master_serdes_rx_delay_rst.write(1)
+    wb.regs.master_serdes_rx_delay_inc.write(1)
+    master_delay = None
+    for i in range(512):
+        wb.regs.master_serdes_phase_detector_reset.write(1)
+        status = wb.regs.master_serdes_phase_detector_status.read() 
+        if (status & too_early):
+            print("-", end="")
+        elif (status & too_late):
+            print("+", end="")
+        else:
+            print(".", end="")
+        sys.stdout.flush()
+        wb.regs.master_serdes_rx_delay_ce.write(1)
+    print("")
+
+
 def amc_rtm_link_config():
     # enable square wave
     wb.regs.master_serdes_tx_produce_square_wave.write(1)
@@ -111,10 +149,12 @@ def analyzer():
     analyzer.save("dump.vcd")
 
 if len(sys.argv) < 2:
-    print("missing test (config or analyzer)")
+    print("missing test (delay, config or analyzer)")
     wb.close()
     exit()
-if sys.argv[1] == "config":
+if sys.argv[1] == "delay":
+    amc_rtm_link_delay()
+elif sys.argv[1] == "config":
     amc_rtm_link_config()
 elif sys.argv[1] == "analyzer":
     analyzer()
