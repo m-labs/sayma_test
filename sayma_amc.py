@@ -253,8 +253,6 @@ class Platform(XilinxPlatform):
 
     def __init__(self):
         XilinxPlatform.__init__(self, "xcku040-ffva1156-1-c", _io, toolchain="vivado")
-        #self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 67]")
-        #self.add_platform_command("set_property INTERNAL_VREF 0.750 [get_iobanks 68]")
 
 
 class _CRG(Module):
