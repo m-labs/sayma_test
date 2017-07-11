@@ -679,22 +679,22 @@ class AMCRTMLinkTestSoC(SoCCore):
             master_serdes.cd_serdes_10x.clk,
             master_serdes.cd_serdes_2p5x.clk)
 
-        counter = Signal(32)
-        self.sync.master_serdes_serdes += counter.eq(counter + 1)
+        master_counter = Signal(32)
+        self.sync.master_serdes_serdes += master_counter.eq(master_counter + 1)
         self.comb += [
-            master_serdes.encoder.d[0].eq(counter),
-            master_serdes.encoder.d[1].eq(counter)
+            master_serdes.encoder.d[0].eq(master_counter),
+            master_serdes.encoder.d[1].eq(master_counter)
         ]
 
         # amc rtm link slave (to test master with rtm loopback
         # until we have rtm board)
         slave_pll = SERDESPLL(125e6, 1.25e9)
-        self.comb += slave_pll.refclk.eq(ClockSignal())
         self.submodules += slave_pll
 
         slave_pads = platform.request("amc_rtm_link_slave")
         self.submodules.slave_serdes = slave_serdes = SERDES(
             slave_pll, slave_pads, mode="slave")
+
 
         slave_serdes.cd_serdes.clk.attr.add("keep")
         slave_serdes.cd_serdes_10x.clk.attr.add("keep")
@@ -708,11 +708,11 @@ class AMCRTMLinkTestSoC(SoCCore):
             slave_serdes.cd_serdes_10x.clk,
             slave_serdes.cd_serdes_2p5x.clk)
 
-        counter = Signal(32)
-        self.sync.master_serdes_serdes += counter.eq(counter + 1)
+        slave_counter = Signal(32)
+        self.sync.slave_serdes_serdes += slave_counter.eq(slave_counter + 1)
         self.comb += [
-            slave_serdes.encoder.d[0].eq(counter),
-            slave_serdes.encoder.d[1].eq(counter)
+            slave_serdes.encoder.d[0].eq(slave_counter),
+            slave_serdes.encoder.d[1].eq(slave_counter)
         ]
 
         # leds

@@ -18,6 +18,7 @@ class SERDESPLL(Module):
         self.refclk = Signal()
         self.serdes_clk = Signal()
         self.serdes_10x_clk = Signal()
+        self.serdes_10x_90_clk = Signal()
         self.serdes_2p5x_clk = Signal()
 
         # refclk: 125MHz
@@ -31,6 +32,7 @@ class SERDESPLL(Module):
         pll_fb = Signal()
         pll_serdes_clk = Signal()
         pll_serdes_10x_clk = Signal()
+        pll_serdes_10x_90_clk = Signal()
         pll_serdes_2p5x_clk = Signal()
         self.specials += [
             Instance("PLLE2_BASE",
@@ -50,12 +52,17 @@ class SERDESPLL(Module):
                 p_CLKOUT1_DIVIDE=1, p_CLKOUT1_PHASE=0.0,
                 o_CLKOUT1=pll_serdes_10x_clk,
 
+                # 625MHz: serdes_10x_90
+                p_CLKOUT2_DIVIDE=1, p_CLKOUT2_PHASE=90.0,
+                o_CLKOUT2=pll_serdes_10x_90_clk,
+
                 # 156.25MHz: serdes_2p5x
-                p_CLKOUT2_DIVIDE=4, p_CLKOUT2_PHASE=0.0,
-                o_CLKOUT2=pll_serdes_2p5x_clk
+                p_CLKOUT3_DIVIDE=4, p_CLKOUT3_PHASE=0.0,
+                o_CLKOUT3=pll_serdes_2p5x_clk
             ),
             Instance("BUFG", i_I=pll_serdes_clk, o_O=self.serdes_clk),
             Instance("BUFG", i_I=pll_serdes_10x_clk, o_O=self.serdes_10x_clk),
+            Instance("BUFG", i_I=pll_serdes_10x_90_clk, o_O=self.serdes_10x_90_clk),
             Instance("BUFG", i_I=pll_serdes_2p5x_clk, o_O=self.serdes_2p5x_clk)
         ]
         self.comb += self.lock.eq(pll_locked)
@@ -92,15 +99,18 @@ class SERDES(Module, AutoCSR):
         # - linerate/10 pll refclk provided by clk_pads
         self.clock_domains.cd_serdes = ClockDomain()
         self.clock_domains.cd_serdes_10x = ClockDomain()
+        self.clock_domains.cd_serdes_10x_90 = ClockDomain()
         self.clock_domains.cd_serdes_2p5x = ClockDomain()
         self.comb += [
             self.cd_serdes.clk.eq(pll.serdes_clk),
             self.cd_serdes_10x.clk.eq(pll.serdes_10x_clk),
+            self.cd_serdes_10x_90.clk.eq(pll.serdes_10x_90_clk),
             self.cd_serdes_2p5x.clk.eq(pll.serdes_2p5x_clk)
         ]
         self.specials += [
             AsyncResetSynchronizer(self.cd_serdes, ~pll.lock),
             AsyncResetSynchronizer(self.cd_serdes_10x, ~pll.lock),
+            AsyncResetSynchronizer(self.cd_serdes_10x_90, ~pll.lock),
             AsyncResetSynchronizer(self.cd_serdes_2p5x, ~pll.lock)
         ]
 
@@ -114,6 +124,9 @@ class SERDES(Module, AutoCSR):
         rx_prbs_errors = Signal(32)
 
         rx_bitslip_value = Signal(5)
+        rx_delay_rst = Signal()
+        rx_delay_inc = Signal()
+        rx_delay_ce = Signal()
 
         self.specials += [
             MultiReg(self.tx_pattern.storage, tx_pattern, "serdes"),
@@ -127,7 +140,20 @@ class SERDES(Module, AutoCSR):
             MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys"), # FIXME
         ]
 
-        self.specials += MultiReg(self.rx_bitslip_value.storage, rx_bitslip_value, "serdes"),
+        self.specials += [
+            MultiReg(self.rx_bitslip_value.storage, rx_bitslip_value, "serdes"),
+            MultiReg(self.rx_delay_inc.storage, rx_delay_inc, "serdes_2p5x"),
+        ]
+        self.submodules.do_rx_delay_rst = PulseSynchronizer("sys", "serdes_2p5x")
+        self.comb += [
+            rx_delay_rst.eq(self.do_rx_delay_rst.o),
+            self.do_rx_delay_rst.i.eq(self.rx_delay_rst.re)
+        ]
+        self.submodules.do_rx_delay_ce = PulseSynchronizer("sys", "serdes_2p5x")
+        self.comb += [
+            rx_delay_ce.eq(self.do_rx_delay_ce.o),
+            self.do_rx_delay_ce.i.eq(self.rx_delay_ce.re)
+        ]
 
         # tx clock (linerate/10)
         if mode == "master":
@@ -190,7 +216,6 @@ class SERDES(Module, AutoCSR):
         use_bufr = True
         if mode == "slave":
             clk_i = Signal()
-
             clk_i_bufg = Signal()
             self.specials += [
                 Instance("IBUFDS",
@@ -230,25 +255,19 @@ class SERDES(Module, AutoCSR):
 
         serdes_m_i_delayed = Signal()
         serdes_m_q = Signal(8)
-        # FIXME: idelay taps works differently on ultrascale (2.5ps to 15ps for a tap...)
-        serdes_m_delay_value = int(1/(2*pll.linerate)/15e-12) # half bit period
-        assert serdes_m_delay_value < 512
         self.specials += [
             Instance("IDELAYE3",
                 p_CASCADE="NONE", p_UPDATE_MODE="ASYNC",p_REFCLK_FREQUENCY=200.0,
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                p_DELAY_FORMAT="COUNT", p_DELAY_SRC="DATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=serdes_m_delay_value,
+                p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
 
                 i_CLK=ClockSignal("serdes_2p5x"),
-                i_RST=ResetSignal("serdes_2p5x"),
-                # For now desactivate for simulation
-                #i_INC=self.phase_detector.inc, i_EN_VTC=0,
-                #i_CE=self.phase_detector.ce,
-                i_INC=1, i_EN_VTC=0,
-                i_CE=0,
+                i_RST=rx_delay_rst,
+                i_INC=rx_delay_inc, i_EN_VTC=0,
+                i_CE=rx_delay_ce,
 
-                i_DATAIN=serdes_m_i_nodelay, o_DATAOUT=serdes_m_i_delayed
+                i_IDATAIN=serdes_m_i_nodelay, o_DATAOUT=serdes_m_i_delayed
             ),
             Instance("ISERDESE3",
                 p_DATA_WIDTH=8,
@@ -265,25 +284,19 @@ class SERDES(Module, AutoCSR):
 
         serdes_s_i_delayed = Signal()
         serdes_s_q = Signal(8)
-        # FIXME: idelay taps works differently on ultrascale (2.5ps to 15ps for a tap...)
-        serdes_s_idelay_value = int(1/(pll.linerate)/15e-12) # bit period
-        assert serdes_s_idelay_value < 512
         self.specials += [
             Instance("IDELAYE3",
                 p_CASCADE="NONE", p_UPDATE_MODE="ASYNC",p_REFCLK_FREQUENCY=200.0,
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                p_DELAY_FORMAT="COUNT", p_DELAY_SRC="DATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=serdes_s_idelay_value,
+                p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
 
                 i_CLK=ClockSignal("serdes_2p5x"),
-                i_RST=ResetSignal("serdes_2p5x"),
-                # For now desactivate for simulation
-                #i_INC=self.phase_detector.inc, i_EN_VTC=0,
-                #i_CE=self.phase_detector.ce,
-                i_INC=1, i_EN_VTC=0,
-                i_CE=0,
+                i_RST=rx_delay_rst,
+                i_INC=rx_delay_inc, i_EN_VTC=0,
+                i_CE=rx_delay_ce,
 
-                i_DATAIN=serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed
+                i_IDATAIN=serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed
             ),
             Instance("ISERDESE3",
                 p_DATA_WIDTH=8,
@@ -291,7 +304,7 @@ class SERDES(Module, AutoCSR):
                 i_D=serdes_s_i_delayed,
                 i_RST=ResetSignal("serdes_2p5x"),
                 i_FIFO_RD_CLK=0, i_FIFO_RD_EN=0,
-                i_CLK=ClockSignal("serdes_10x"), i_CLK_B=~ClockSignal("serdes_10x"),
+                i_CLK=ClockSignal("serdes_10x_90"), i_CLK_B=~ClockSignal("serdes_10x_90"),
                 i_CLKDIV=ClockSignal("serdes_2p5x"),
                 o_Q=serdes_s_q
             ),
@@ -308,8 +321,8 @@ class SERDES(Module, AutoCSR):
             self.rx_gearbox.i.eq(serdes_m_q),
             self.rx_bitslip.value.eq(rx_bitslip_value),
             self.rx_bitslip.i.eq(self.rx_gearbox.o),
-            rx_pattern.eq(self.rx_gearbox.o),
             self.decoders[0].input.eq(self.rx_bitslip.o[:10]),
             self.decoders[1].input.eq(self.rx_bitslip.o[10:]),
+            rx_pattern.eq(self.rx_bitslip.o),
             self.rx_prbs.i.eq(self.rx_bitslip.o)
         ]
