@@ -223,7 +223,6 @@ _io = [
         Subsignal("n", Pins("P5")),
     ),
 
-
     # amc_rtm_link
     ("amc_rtm_link_master", 0,
         Subsignal("clk_p", Pins("J8"), IOStandard("LVDS")), # rtm_fpga_usr_io_p

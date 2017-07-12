@@ -3,6 +3,6 @@ Test designs for Sayma boards (ddr3, drtio, amc-rtm link, jesd204b)
 [> Status
 ---------
 - ddr3: 32 bit and 64 bit ddr3 validated at 1Gbps/pin.
-- drtio: validated at 1.25Gbps.
+- drtio: MultiGTH validated with 2 lanes at 1.25Gbps.
 - amc-rtm link: artix7 and ultrascale low level loopback validated at 1.25Gbps, need testing with AMC/RTM.
 - jesd204b: untested
