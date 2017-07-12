@@ -471,8 +471,7 @@ class GTH(Module, AutoCSR):
         else:
             self.comb += self.rx_ready.eq(rx_init.done)
 
-# TODO:
-# - do something specific for rx clocks?
+
 class MultiGTH(Module, AutoCSR):
     def __init__(self, plls, tx_pads, rx_pads, sys_clk_freq, **kwargs):
         self.nlanes = nlanes = len(tx_pads.p)
