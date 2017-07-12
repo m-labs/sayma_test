@@ -25,7 +25,7 @@ from litejesd204b.phy import LiteJESD204BPhyTX
 from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
 
-from transceiver.gth_ultrascale import GTHChannelPLL, MultiGTH
+from transceiver.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
 from transceiver.serdes_ultrascale import SERDESPLL, SERDES
 
 from gateware import firmware
@@ -559,7 +559,12 @@ class JESDTestSoC(SoCCore):
 
 
 class DRTIOTestSoC(SoCCore):
-    def __init__(self, platform):
+    csr_map = {
+        "drtio_phy": 20
+    }
+    csr_map.update(SoCCore.csr_map)
+
+    def __init__(self, platform, pll="cpll"):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -586,12 +591,18 @@ class DRTIOTestSoC(SoCCore):
                 o_O=refclk)
         ]
 
-        cplls = [GTHChannelPLL(refclk, 125e6, 1.25e9) for i in range(2)]
-        self.submodules += iter(cplls)
-        print(cplls)
+        if pll == "cpll":
+            plls = [GTHChannelPLL(refclk, 125e6, 2.5e9) for i in range(2)]
+            self.submodules += iter(plls)
+            print(plls)
+        elif pll == "qpll":
+            qpll = GTHQuadPLL(refclk, 125e6, 1.25e9)
+            plls = [qpll for i in range(2)]
+            self.submodules += qpll
+            print(qpll)
 
         self.submodules.drtio_phy = drtio_phy = MultiGTH(
-            cplls, 
+            plls, 
             platform.request("drtio_tx"),
             platform.request("drtio_rx"),
             clk_freq)
