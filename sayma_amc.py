@@ -588,57 +588,38 @@ class DRTIOTestSoC(SoCCore):
 
         cplls = [GTHChannelPLL(refclk, 125e6, 1.25e9) for i in range(2)]
         self.submodules += iter(cplls)
-        print(cplls[0])
+        print(cplls)
 
         self.submodules.drtio_phy = drtio_phy = MultiGTH(
             cplls, 
             platform.request("drtio_tx"),
             platform.request("drtio_rx"),
-            clk_freq,
-            clock_aligner=True,
-            internal_loopback=False)
+            clk_freq)
         self.comb += platform.request("drtio_tx_disable_n").eq(0b11)
 
         counter = Signal(32)
         self.sync.gth0_tx += counter.eq(counter + 1)
 
-        self.comb += [
-            drtio_phy.encoders[0].k.eq(1),
-            drtio_phy.encoders[0].d.eq((5 << 5) | 28),
-            drtio_phy.encoders[1].k.eq(1),
-
-            drtio_phy.encoders[2].k.eq(1),
-            drtio_phy.encoders[2].d.eq((5 << 5) | 28),
-            drtio_phy.encoders[3].k.eq(1)
-        ]
-        if loopback:
+        for i in range(drtio_phy.nlanes):
             self.comb += [
-                drtio_phy.encoders[1].d.eq(drtio_phy.decoders[1].d),
-                drtio_phy.encoders[3].d.eq(drtio_phy.decoders[3].d)
+                drtio_phy.encoders[2*i + 0].k.eq(1),
+                drtio_phy.encoders[2*i + 0].d.eq((5 << 5) | 28),
+                drtio_phy.encoders[2*i + 1].k.eq(1),
             ]
-        else:
-            self.comb += [
-                drtio_phy.encoders[1].d.eq(counter[26:]),
-                drtio_phy.encoders[3].d.eq(counter[26:])
-            ]
+            if loopback:
+                self.comb += drtio_phy.encoders[2*i + 1].d.eq(drtio_phy.decoders[2*i + 1].d),
+            else:
+                self.comb += drtio_phy.encoders[2*i + 1].d.eq(counter[26:])
 
-        drtio_phy.gths[0].cd_tx.clk.attr.add("keep")
-        drtio_phy.gths[0].cd_rx.clk.attr.add("keep")
-        platform.add_period_constraint(drtio_phy.gths[0].cd_tx.clk, 1e9/drtio_phy.gths[0].tx_clk_freq)
-        platform.add_period_constraint(drtio_phy.gths[0].cd_rx.clk, 1e9/drtio_phy.gths[0].tx_clk_freq)
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            drtio_phy.gths[0].cd_tx.clk,
-            drtio_phy.gths[0].cd_rx.clk)
-
-        drtio_phy.gths[1].cd_tx.clk.attr.add("keep")
-        drtio_phy.gths[1].cd_rx.clk.attr.add("keep")
-        platform.add_period_constraint(drtio_phy.gths[1].cd_tx.clk, 1e9/drtio_phy.gths[1].tx_clk_freq)
-        platform.add_period_constraint(drtio_phy.gths[1].cd_rx.clk, 1e9/drtio_phy.gths[1].tx_clk_freq)
-        self.platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
-            drtio_phy.gths[1].cd_tx.clk,
-            drtio_phy.gths[1].cd_rx.clk)
+        for i in range(drtio_phy.nlanes):
+            drtio_phy.gths[i].cd_tx.clk.attr.add("keep")
+            drtio_phy.gths[i].cd_rx.clk.attr.add("keep")
+            platform.add_period_constraint(drtio_phy.gths[i].cd_tx.clk, 1e9/drtio_phy.gths[i].tx_clk_freq)
+            platform.add_period_constraint(drtio_phy.gths[i].cd_rx.clk, 1e9/drtio_phy.gths[i].rx_clk_freq)
+            self.platform.add_false_path_constraints(
+                self.crg.cd_sys.clk,
+                drtio_phy.gths[i].cd_tx.clk,
+                drtio_phy.gths[i].cd_rx.clk)
 
     def do_exit(self, vns):
         pass

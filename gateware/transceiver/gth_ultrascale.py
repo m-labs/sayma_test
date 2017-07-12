@@ -100,6 +100,7 @@ class GTH(Module, AutoCSR):
         self.rxoutclk = Signal()
 
         self.tx_clk_freq = cpll.config["linerate"]/20
+        self.rx_clk_freq = cpll.config["linerate"]/20
 
         # control/status cdc
         tx_produce_square_wave = Signal()
