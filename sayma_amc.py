@@ -25,7 +25,7 @@ from litejesd204b.phy import LiteJESD204BPhyTX
 from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
 
-from transceiver.gth_ultrascale import GTHChannelPLL, GTH
+from transceiver.gth_ultrascale import GTHChannelPLL, MultiGTH
 from transceiver.serdes_ultrascale import SERDESPLL, SERDES
 
 from gateware import firmware
@@ -202,26 +202,16 @@ _io = [
         Subsignal("txn", Pins("R3 U3 W3 AA3 AC3 AE3 AG3 AH5"))
     ),
 
-    # sfp
-    ("sfp_tx", 0,
-        Subsignal("p", Pins("AN4")),
-        Subsignal("n", Pins("AN3"))
+    # drtio
+    ("drtio_tx", 0,
+        Subsignal("p", Pins("AN4 AM6")),
+        Subsignal("n", Pins("AN3 AM5"))
     ),
-    ("sfp_rx", 0,
-        Subsignal("p", Pins("AP2")),
-        Subsignal("n", Pins("AP1"))
+    ("drtio_rx", 0,
+        Subsignal("p", Pins("AP2 AM2")),
+        Subsignal("n", Pins("AP1 AM1"))
     ),
-    ("sfp_tx_disable_n", 0, Pins("AP11"), IOStandard("LVCMOS18")),
-
-    ("sfp_tx", 1,
-        Subsignal("p", Pins("AM6")),
-        Subsignal("n", Pins("AM5"))
-    ),
-    ("sfp_rx", 1,
-        Subsignal("p", Pins("AM2")),
-        Subsignal("n", Pins("AM1"))
-    ),
-    ("sfp_tx_disable_n", 1, Pins("AM12"), IOStandard("LVCMOS18")),
+    ("drtio_tx_disable_n", 0, Pins("AP11 AM12"), IOStandard("LVCMOS18")),
 
     # rtm
     ("rtm_refclk125", 0,
@@ -569,7 +559,7 @@ class JESDTestSoC(SoCCore):
 
 
 class DRTIOTestSoC(SoCCore):
-    def __init__(self, platform, sfp=0, loopback=True):
+    def __init__(self, platform, loopback=True):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -596,38 +586,59 @@ class DRTIOTestSoC(SoCCore):
                 o_O=refclk)
         ]
 
-        cpll = GTHChannelPLL(refclk, 125e6, 1.25e9)
-        print(cpll)
-        self.submodules += cpll
+        cplls = [GTHChannelPLL(refclk, 125e6, 1.25e9) for i in range(2)]
+        self.submodules += iter(cplls)
+        print(cplls[0])
 
-        self.comb += platform.request("sfp_tx_disable_n", sfp).eq(1)
-        tx_pads = platform.request("sfp_tx", sfp)
-        rx_pads = platform.request("sfp_rx", sfp)
-        gth = GTH(cpll, tx_pads, rx_pads, self.clk_freq,
-            clock_aligner=True, internal_loopback=False)
-        self.submodules += gth
+        self.submodules.drtio_phy = drtio_phy = MultiGTH(
+            cplls, 
+            platform.request("drtio_tx"),
+            platform.request("drtio_rx"),
+            clk_freq,
+            clock_aligner=True,
+            internal_loopback=False)
+        self.comb += platform.request("drtio_tx_disable_n").eq(0b11)
 
         counter = Signal(32)
-        self.sync.tx += counter.eq(counter + 1)
+        self.sync.gth0_tx += counter.eq(counter + 1)
 
         self.comb += [
-            gth.encoder.k[0].eq(1),
-            gth.encoder.d[0].eq((5 << 5) | 28),
-            gth.encoder.k[1].eq(0),
+            drtio_phy.encoders[0].k.eq(1),
+            drtio_phy.encoders[0].d.eq((5 << 5) | 28),
+            drtio_phy.encoders[1].k.eq(1),
+
+            drtio_phy.encoders[2].k.eq(1),
+            drtio_phy.encoders[2].d.eq((5 << 5) | 28),
+            drtio_phy.encoders[3].k.eq(1)
         ]
         if loopback:
-            self.comb += gth.encoder.d[1].eq(gth.decoders[1].d)
+            self.comb += [
+                drtio_phy.encoders[1].d.eq(drtio_phy.decoders[1].d),
+                drtio_phy.encoders[3].d.eq(drtio_phy.decoders[3].d)
+            ]
         else:
-            self.comb += gth.encoder.d[1].eq(counter[26:])
+            self.comb += [
+                drtio_phy.encoders[1].d.eq(counter[26:]),
+                drtio_phy.encoders[3].d.eq(counter[26:])
+            ]
 
-        gth.cd_tx.clk.attr.add("keep")
-        gth.cd_rx.clk.attr.add("keep")
-        platform.add_period_constraint(gth.cd_tx.clk, 1e9/gth.tx_clk_freq)
-        platform.add_period_constraint(gth.cd_rx.clk, 1e9/gth.tx_clk_freq)
+        drtio_phy.gths[0].cd_tx.clk.attr.add("keep")
+        drtio_phy.gths[0].cd_rx.clk.attr.add("keep")
+        platform.add_period_constraint(drtio_phy.gths[0].cd_tx.clk, 1e9/drtio_phy.gths[0].tx_clk_freq)
+        platform.add_period_constraint(drtio_phy.gths[0].cd_rx.clk, 1e9/drtio_phy.gths[0].tx_clk_freq)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            gth.cd_tx.clk,
-            gth.cd_rx.clk)
+            drtio_phy.gths[0].cd_tx.clk,
+            drtio_phy.gths[0].cd_rx.clk)
+
+        drtio_phy.gths[1].cd_tx.clk.attr.add("keep")
+        drtio_phy.gths[1].cd_rx.clk.attr.add("keep")
+        platform.add_period_constraint(drtio_phy.gths[1].cd_tx.clk, 1e9/drtio_phy.gths[1].tx_clk_freq)
+        platform.add_period_constraint(drtio_phy.gths[1].cd_rx.clk, 1e9/drtio_phy.gths[1].tx_clk_freq)
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys.clk,
+            drtio_phy.gths[1].cd_tx.clk,
+            drtio_phy.gths[1].cd_rx.clk)
 
     def do_exit(self, vns):
         pass
@@ -792,10 +803,7 @@ def main():
     elif sys.argv[1] == "jesd":
         soc = JESDTestSoC(platform)
     elif sys.argv[1] == "drtio":
-        sfp = 0
-        if len(sys.argv) > 2:
-            sfp = int(sys.argv[2])
-        soc = DRTIOTestSoC(platform, sfp)
+        soc = DRTIOTestSoC(platform)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
     builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv",

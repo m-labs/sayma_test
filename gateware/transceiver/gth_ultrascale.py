@@ -341,7 +341,7 @@ class GTH(Module, AutoCSR):
 # TODO:
 # - do something specific for rx clocks?
 class MultiGTH(Module):
-    def __init__(self, cpll, tx_pads, rx_pads, sys_clk_freq, **kwargs):
+    def __init__(self, cplls, tx_pads, rx_pads, sys_clk_freq, **kwargs):
         self.nlanes = nlanes = len(tx_pads.p)
 
         class EncoderExposer:
@@ -365,7 +365,7 @@ class MultiGTH(Module):
 
         rx_ready = Signal(reset=1)
         for i in range(nlanes):
-            gth = GTH(cpll, get_pads(tx_pads, i), get_pads(rx_pads, i), sys_clk_freq, **kwargs)
+            gth = GTH(cplls[i], get_pads(tx_pads, i), get_pads(rx_pads, i), sys_clk_freq, **kwargs)
             self.gths[i] = gth
             setattr(self.submodules, "gth"+str(i), gth)
             for j in range(2):
