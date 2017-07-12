@@ -559,7 +559,7 @@ class JESDTestSoC(SoCCore):
 
 
 class DRTIOTestSoC(SoCCore):
-    def __init__(self, platform, loopback=True):
+    def __init__(self, platform):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -604,12 +604,11 @@ class DRTIOTestSoC(SoCCore):
             self.comb += [
                 drtio_phy.encoders[2*i + 0].k.eq(1),
                 drtio_phy.encoders[2*i + 0].d.eq((5 << 5) | 28),
-                drtio_phy.encoders[2*i + 1].k.eq(1),
+                drtio_phy.encoders[2*i + 1].k.eq(0),
             ]
-            if loopback:
-                self.comb += drtio_phy.encoders[2*i + 1].d.eq(drtio_phy.decoders[2*i + 1].d),
-            else:
-                self.comb += drtio_phy.encoders[2*i + 1].d.eq(counter[26:])
+            self.comb += drtio_phy.encoders[2*i + 1].d.eq(counter[26:])
+            for j in range(2):
+                self.comb += platform.request("user_led", 2*i + j).eq(drtio_phy.decoders[2*i + 1].d[j])
 
         for i in range(drtio_phy.nlanes):
             drtio_phy.gths[i].cd_tx.clk.attr.add("keep")

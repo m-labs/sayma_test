@@ -82,7 +82,8 @@ class GTH(Module, AutoCSR):
         self.rx_prbs_config = CSRStorage(2)
         self.rx_prbs_errors = CSRStatus(32)
 
-        self.rx_bitslip_value = CSRStorage(5)
+        self.restart = CSR()
+        self.ready = CSRStatus(2)
 
         # # #
 
@@ -92,6 +93,7 @@ class GTH(Module, AutoCSR):
             Decoder(True)) for _ in range(2)]
         self.submodules += self.decoders
 
+        self.tx_ready = Signal()
         self.rx_ready = Signal()
 
         # transceiver direct clock outputs
@@ -109,8 +111,6 @@ class GTH(Module, AutoCSR):
         rx_prbs_config = Signal(2)
         rx_prbs_errors = Signal(32)
 
-        rx_bitslip_value = Signal(5)
-
         self.specials += [
             MultiReg(self.tx_produce_square_wave.storage, tx_produce_square_wave, "tx"),
             MultiReg(self.tx_prbs_config.storage, tx_prbs_config, "tx"),
@@ -121,12 +121,14 @@ class GTH(Module, AutoCSR):
             MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys"), # FIXME
         ]
 
-        self.specials += MultiReg(self.rx_bitslip_value.storage, rx_bitslip_value, "rx")
-
         # # #
 
         # TX generates RTIO clock, init must be in system domain
         tx_init = GTHInit(sys_clk_freq, False)
+        self.comb += [
+            tx_init.restart.eq(self.restart.re),
+            self.tx_ready.eq(tx_init.done)
+        ]
         # RX receives restart commands from RTIO domain
         rx_init = ClockDomainsRenamer("tx")(
             GTHInit(self.tx_clk_freq, True))
@@ -134,7 +136,9 @@ class GTH(Module, AutoCSR):
         self.comb += [
             tx_init.plllock.eq(cpll.lock),
             rx_init.plllock.eq(cpll.lock),
-            cpll.reset.eq(tx_init.pllreset)
+            cpll.reset.eq(tx_init.pllreset),
+            self.ready.status.eq(Cat(self.tx_ready,
+                                     self.rx_ready))
         ]
 
         txdata = Signal(20)
