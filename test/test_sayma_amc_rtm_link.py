@@ -15,11 +15,12 @@ wb.open()
 too_late = 0x1
 too_early = 0x2
 
-def amc_rtm_link_delay():
+def amc_rtm_link_phase_detector(debug=False):
     # find slave delay
     print("slave delay:")
+    wb.regs.slave_serdes_rx_delay_en_vtc.write(0)
     wb.regs.slave_serdes_rx_delay_rst.write(1)
-    wb.regs.slave_serdes_rx_delay_inc.write(1)
+    wb.regs.slave_serdes_rx_delay_en_vtc.write(1)
     slave_delay = None
     for i in range(512):
         wb.regs.slave_serdes_phase_detector_reset.write(1)
@@ -31,13 +32,20 @@ def amc_rtm_link_delay():
         else:
             print(".", end="")
         sys.stdout.flush()
+        wb.regs.slave_serdes_rx_delay_en_vtc.write(0)
+        wb.regs.slave_serdes_rx_delay_inc.write(1)
         wb.regs.slave_serdes_rx_delay_ce.write(1)
+        wb.regs.slave_serdes_rx_delay_inc.write(0)
+        wb.regs.slave_serdes_rx_delay_en_vtc.write(1)
+        if debug:
+            print("s: {:d} / m: {:d}".format(
+                wb.regs.slave_serdes_rx_delay_m_cntvalueout.read(),
+                wb.regs.slave_serdes_rx_delay_s_cntvalueout.read()))
     print("")
 
     # find master delay
     print("master delay:")
     wb.regs.master_serdes_rx_delay_rst.write(1)
-    wb.regs.master_serdes_rx_delay_inc.write(1)
     master_delay = None
     for i in range(512):
         wb.regs.master_serdes_phase_detector_reset.write(1)
@@ -49,15 +57,19 @@ def amc_rtm_link_delay():
         else:
             print(".", end="")
         sys.stdout.flush()
+        wb.regs.master_serdes_rx_delay_en_vtc.write(0)
+        wb.regs.master_serdes_rx_delay_inc.write(1)
         wb.regs.master_serdes_rx_delay_ce.write(1)
+        wb.regs.master_serdes_rx_delay_inc.write(0)
+        wb.regs.master_serdes_rx_delay_en_vtc.write(1)
+        if debug:
+            print("s: {:d} / m: {:d}".format(
+                wb.regs.master_serdes_rx_delay_m_cntvalueout.read(),
+                wb.regs.master_serdes_rx_delay_s_cntvalueout.read()))
     print("")
 
 
-def amc_rtm_link_config():
-    # enable square wave
-    wb.regs.master_serdes_tx_produce_square_wave.write(1)
-    wb.regs.slave_serdes_tx_produce_square_wave.write(1)
-
+def amc_rtm_link_calibration():
     # parameters
     bitslip_range = range(0, 20)
     delay_range = range(0, 512)
@@ -70,19 +82,21 @@ def amc_rtm_link_config():
     for i in delay_range:
         wb.regs.slave_serdes_phase_detector_reset.write(1)
         status = wb.regs.slave_serdes_phase_detector_status.read()
-        if (last_status & too_late) and (status & too_early):
+        if (last_status & too_early) and (status & too_late):
             slave_delay = i
             break
+        wb.regs.slave_serdes_rx_delay_en_vtc.write(0)
         wb.regs.slave_serdes_rx_delay_ce.write(1)
+        wb.regs.slave_serdes_rx_delay_en_vtc.write(1)
         last_status = status
     if slave_delay is not None:
         print("slave delay: {:d}".format(slave_delay))
     else:
-        print("unable to find slave delay")
-        exit()
+        print("slave delay: not found")
 
     # find slave bitslip
     slave_bitslip = None
+    wb.regs.master_serdes_tx_produce_square_wave.write(1)
     for i in bitslip_range:
         wb.regs.slave_serdes_rx_bitslip_value.write(i)
         if wb.regs.slave_serdes_rx_pattern.read() == 0x003ff:
@@ -91,8 +105,8 @@ def amc_rtm_link_config():
     if slave_bitslip is not None:
         print("slave bitslip: {:d}".format(slave_bitslip))
     else:
-        print("unable to find slave bitslip")
-        exit()
+        print("slave bitslip: not found")
+    wb.regs.master_serdes_tx_produce_square_wave.write(0)
 
     # find master delay
     wb.regs.master_serdes_rx_delay_rst.write(1)
@@ -102,19 +116,21 @@ def amc_rtm_link_config():
     for i in delay_range:
         wb.regs.master_serdes_phase_detector_reset.write(1)
         status = wb.regs.master_serdes_phase_detector_status.read()
-        if (last_status & too_late) and (status & too_early):
+        if (last_status & too_early) and (status & too_late):
             master_delay = i
             break
+        wb.regs.master_serdes_rx_delay_en_vtc.write(0)
         wb.regs.master_serdes_rx_delay_ce.write(1)
+        wb.regs.master_serdes_rx_delay_en_vtc.write(1)
         last_status = status
     if master_delay is not None:
         print("master delay: {:d}".format(master_delay))
     else:
-        print("unable to find master delay")
-        exit()
+        print("master delay: not found")
 
     # find master bitslip
     master_bitslip = None
+    wb.regs.slave_serdes_tx_produce_square_wave.write(1)
     for i in bitslip_range:
         wb.regs.master_serdes_rx_bitslip_value.write(i)
         if wb.regs.master_serdes_rx_pattern.read() == 0x003ff:
@@ -123,12 +139,9 @@ def amc_rtm_link_config():
     if master_bitslip is not None:
         print("master bitslip: {:d}".format(master_bitslip))
     else:
-        print("unable to find master delay")
-        exit()
-  
-    # disable square wave
-    wb.regs.master_serdes_tx_produce_square_wave.write(0)
+        print("master bitslip: not found")
     wb.regs.slave_serdes_tx_produce_square_wave.write(0)
+
 
 def analyzer():
     groups = {
@@ -136,10 +149,6 @@ def analyzer():
         "slave":  1,
     }
 
-    # disable square wave
-    wb.regs.master_serdes_tx_produce_square_wave.write(1)
-    wb.regs.slave_serdes_tx_produce_square_wave.write(1)
-   
     analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
     analyzer.configure_group(groups["master"])
     analyzer.configure_trigger(cond={})  
@@ -149,13 +158,13 @@ def analyzer():
     analyzer.save("dump.vcd")
 
 if len(sys.argv) < 2:
-    print("missing test (delay, config or analyzer)")
+    print("missing test (phase_detector, calibration or analyzer)")
     wb.close()
     exit()
-if sys.argv[1] == "delay":
-    amc_rtm_link_delay()
-elif sys.argv[1] == "config":
-    amc_rtm_link_config()
+if sys.argv[1] == "phase_detector":
+    amc_rtm_link_phase_detector()
+elif sys.argv[1] == "calibration":
+    amc_rtm_link_calibration()
 elif sys.argv[1] == "analyzer":
     analyzer()
 else:

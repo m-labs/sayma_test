@@ -32,7 +32,6 @@ class SERDESPLL(Module):
         pll_fb = Signal()
         pll_serdes_clk = Signal()
         pll_serdes_10x_clk = Signal()
-        pll_serdes_10x_90_clk = Signal()
         pll_serdes_2p5x_clk = Signal()
         self.specials += [
             Instance("PLLE2_BASE",
@@ -52,17 +51,12 @@ class SERDESPLL(Module):
                 p_CLKOUT1_DIVIDE=1, p_CLKOUT1_PHASE=0.0,
                 o_CLKOUT1=pll_serdes_10x_clk,
 
-                # 625MHz: serdes_10x_90
-                p_CLKOUT2_DIVIDE=1, p_CLKOUT2_PHASE=90.0,
-                o_CLKOUT2=pll_serdes_10x_90_clk,
-
                 # 156.25MHz: serdes_2p5x
-                p_CLKOUT3_DIVIDE=4, p_CLKOUT3_PHASE=0.0,
-                o_CLKOUT3=pll_serdes_2p5x_clk
+                p_CLKOUT2_DIVIDE=4, p_CLKOUT2_PHASE=0.0,
+                o_CLKOUT2=pll_serdes_2p5x_clk
             ),
             Instance("BUFG", i_I=pll_serdes_clk, o_O=self.serdes_clk),
             Instance("BUFG", i_I=pll_serdes_10x_clk, o_O=self.serdes_10x_clk),
-            Instance("BUFG", i_I=pll_serdes_10x_90_clk, o_O=self.serdes_10x_90_clk),
             Instance("BUFG", i_I=pll_serdes_2p5x_clk, o_O=self.serdes_2p5x_clk)
         ]
         self.comb += self.lock.eq(pll_locked)
@@ -80,8 +74,11 @@ class SERDES(Module, AutoCSR):
 
         self.rx_bitslip_value = CSRStorage(5)
         self.rx_delay_rst = CSR()
+        self.rx_delay_en_vtc = CSRStorage(reset=1)
         self.rx_delay_inc = CSRStorage()
         self.rx_delay_ce = CSR()
+        self.rx_delay_m_cntvalueout = CSRStatus(9)
+        self.rx_delay_s_cntvalueout = CSRStatus(9)
 
         # # #
 
@@ -126,23 +123,27 @@ class SERDES(Module, AutoCSR):
         rx_bitslip_value = Signal(5)
         rx_delay_rst = Signal()
         rx_delay_inc = Signal()
+        rx_delay_en_vtc = Signal()
         rx_delay_ce = Signal()
+        rx_delay_m_cntvalueout = Signal(9)
+        rx_delay_s_cntvalueout = Signal(9)
 
         self.specials += [
             MultiReg(self.tx_pattern.storage, tx_pattern, "serdes"),
             MultiReg(self.tx_produce_square_wave.storage, tx_produce_square_wave, "serdes"),
-            MultiReg(self.tx_prbs_config.storage, tx_prbs_config, "serdes"),
+            MultiReg(self.tx_prbs_config.storage, tx_prbs_config, "serdes")
         ]
 
         self.specials += [
             MultiReg(rx_pattern, self.rx_pattern.status, "sys"),
             MultiReg(self.rx_prbs_config.storage, rx_prbs_config, "serdes"),
-            MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys"), # FIXME
+            MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys") # FIXME
         ]
 
         self.specials += [
             MultiReg(self.rx_bitslip_value.storage, rx_bitslip_value, "serdes"),
             MultiReg(self.rx_delay_inc.storage, rx_delay_inc, "serdes_2p5x"),
+            MultiReg(self.rx_delay_en_vtc.storage, rx_delay_en_vtc, "serdes_2p5x")
         ]
         self.submodules.do_rx_delay_rst = PulseSynchronizer("sys", "serdes_2p5x")
         self.comb += [
@@ -153,6 +154,10 @@ class SERDES(Module, AutoCSR):
         self.comb += [
             rx_delay_ce.eq(self.do_rx_delay_ce.o),
             self.do_rx_delay_ce.i.eq(self.rx_delay_ce.re)
+        ]
+        self.specials += [
+            MultiReg(rx_delay_m_cntvalueout, self.rx_delay_m_cntvalueout.status, "sys"),
+            MultiReg(rx_delay_s_cntvalueout, self.rx_delay_s_cntvalueout.status, "sys"),
         ]
 
         # tx clock (linerate/10)
@@ -257,17 +262,19 @@ class SERDES(Module, AutoCSR):
         serdes_m_q = Signal(8)
         self.specials += [
             Instance("IDELAYE3",
-                p_CASCADE="NONE", p_UPDATE_MODE="ASYNC",p_REFCLK_FREQUENCY=200.0,
+                p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
+                # Note: can't use TIME mode since not reloading DELAY_VALUE on rst...
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=50, # 1/4 bit period (ambient temp)
 
                 i_CLK=ClockSignal("serdes_2p5x"),
-                i_RST=rx_delay_rst,
-                i_INC=rx_delay_inc, i_EN_VTC=0,
+                i_RST=rx_delay_rst, i_LOAD=0,
+                i_INC=rx_delay_inc, i_EN_VTC=rx_delay_en_vtc,
                 i_CE=rx_delay_ce,
 
-                i_IDATAIN=serdes_m_i_nodelay, o_DATAOUT=serdes_m_i_delayed
+                i_IDATAIN=serdes_m_i_nodelay, o_DATAOUT=serdes_m_i_delayed,
+                o_CNTVALUEOUT=rx_delay_m_cntvalueout
             ),
             Instance("ISERDESE3",
                 p_DATA_WIDTH=8,
@@ -286,17 +293,20 @@ class SERDES(Module, AutoCSR):
         serdes_s_q = Signal(8)
         self.specials += [
             Instance("IDELAYE3",
-                p_CASCADE="NONE", p_UPDATE_MODE="ASYNC",p_REFCLK_FREQUENCY=200.0,
+                p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
+                # Note: can't use TIME mode since not reloading DELAY_VALUE on rst...
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=100, # 1/2 bit period (ambient temp)
 
                 i_CLK=ClockSignal("serdes_2p5x"),
-                i_RST=rx_delay_rst,
-                i_INC=rx_delay_inc, i_EN_VTC=0,
+                i_RST=rx_delay_rst, i_LOAD=0,
+                i_INC=rx_delay_inc, i_EN_VTC=rx_delay_en_vtc,
                 i_CE=rx_delay_ce,
 
-                i_IDATAIN=serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed
+                i_IDATAIN=serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed,
+                o_CNTVALUEOUT=rx_delay_s_cntvalueout
+
             ),
             Instance("ISERDESE3",
                 p_DATA_WIDTH=8,
@@ -304,7 +314,7 @@ class SERDES(Module, AutoCSR):
                 i_D=serdes_s_i_delayed,
                 i_RST=ResetSignal("serdes_2p5x"),
                 i_FIFO_RD_CLK=0, i_FIFO_RD_EN=0,
-                i_CLK=ClockSignal("serdes_10x_90"), i_CLK_B=~ClockSignal("serdes_10x_90"),
+                i_CLK=ClockSignal("serdes_10x"), i_CLK_B=~ClockSignal("serdes_10x"),
                 i_CLKDIV=ClockSignal("serdes_2p5x"),
                 o_Q=serdes_s_q
             ),
