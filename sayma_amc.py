@@ -563,7 +563,7 @@ class DRTIOTestSoC(SoCCore):
     }
     csr_map.update(SoCCore.csr_map)
 
-    def __init__(self, platform, pll="cpll"):
+    def __init__(self, platform, pll="cpll", dw=20):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -591,7 +591,7 @@ class DRTIOTestSoC(SoCCore):
         ]
 
         if pll == "cpll":
-            plls = [GTHChannelPLL(refclk, 125e6, 2.5e9) for i in range(2)]
+            plls = [GTHChannelPLL(refclk, 125e6, 1.25e9) for i in range(2)]
             self.submodules += iter(plls)
             print(plls)
         elif pll == "qpll":
@@ -604,7 +604,8 @@ class DRTIOTestSoC(SoCCore):
             plls, 
             platform.request("drtio_tx"),
             platform.request("drtio_rx"),
-            clk_freq)
+            clk_freq,
+            dw=dw)
         self.comb += platform.request("drtio_tx_disable_n").eq(0b11)
 
         counter = Signal(32)

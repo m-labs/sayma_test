@@ -201,7 +201,9 @@ CLKIN +----> /M  +-->       Charge Pump         | +------------+->/2+--> CLKOUT
 class GTH(Module, AutoCSR):
     def __init__(self, pll, tx_pads, rx_pads, sys_clk_freq,
                  clock_aligner=True, internal_loopback=False,
-                 tx_polarity=0, rx_polarity=0):
+                 tx_polarity=0, rx_polarity=0,
+                 dw=20):
+        assert (dw == 20) or (dw == 40)
         self.tx_produce_square_wave = CSRStorage()
         self.tx_prbs_config = CSRStorage(2)
 
@@ -212,15 +214,17 @@ class GTH(Module, AutoCSR):
         self.ready = CSRStatus(2)
 
         # # #
+        
+        nwords = dw//10
 
         use_cpll = isinstance(pll, GTHChannelPLL)
         use_qpll0 = isinstance(pll, GTHQuadPLL) and pll.config["qpll"] == "qpll0"
         use_qpll1 = isinstance(pll, GTHQuadPLL) and pll.config["qpll"] == "qpll1"
 
         self.submodules.encoder = ClockDomainsRenamer("tx")(
-            Encoder(2, True))
+            Encoder(nwords, True))
         self.decoders = [ClockDomainsRenamer("rx")(
-            Decoder(True)) for _ in range(2)]
+            Decoder(True)) for _ in range(nwords)]
         self.submodules += self.decoders
 
         self.tx_ready = Signal()
@@ -231,8 +235,8 @@ class GTH(Module, AutoCSR):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.tx_clk_freq = pll.config["linerate"]/20
-        self.rx_clk_freq = pll.config["linerate"]/20
+        self.tx_clk_freq = pll.config["linerate"]/dw
+        self.rx_clk_freq = pll.config["linerate"]/dw
 
         # control/status cdc
         tx_produce_square_wave = Signal()
@@ -271,8 +275,8 @@ class GTH(Module, AutoCSR):
                                      self.rx_ready))
         ]
 
-        txdata = Signal(20)
-        rxdata = Signal(20)
+        txdata = Signal(dw)
+        rxdata = Signal(dw)
         rxphaligndone = Signal()
         self.specials += \
             Instance("GTHE3_CHANNEL",
@@ -334,11 +338,11 @@ class GTH(Module, AutoCSR):
                 i_TXSYNCMODE=1,
 
                 # TX data
-                p_TX_DATA_WIDTH=20,
-                p_TX_INT_DATAWIDTH=0,
-                i_TXCTRL0=Cat(txdata[8], txdata[18]),
-                i_TXCTRL1=Cat(txdata[9], txdata[19]),
-                i_TXDATA=Cat(txdata[:8], txdata[10:18]),
+                p_TX_DATA_WIDTH=dw,
+                p_TX_INT_DATAWIDTH=dw == 40,
+                i_TXCTRL0=Cat(*[txdata[10*i+8] for i in range(nwords)]),
+                i_TXCTRL1=Cat(*[txdata[10*i+9] for i in range(nwords)]),
+                i_TXDATA=Cat(*[txdata[10*i:10*i+8] for i in range(nwords)]),
                 i_TXUSRCLK=ClockSignal("tx"),
                 i_TXUSRCLK2=ClockSignal("tx"),
 
@@ -389,11 +393,11 @@ class GTH(Module, AutoCSR):
                 p_CLK_COR_SEQ_2_ENABLE=0b1111,
 
                 # RX data
-                p_RX_DATA_WIDTH=20,
-                p_RX_INT_DATAWIDTH=0,
-                o_RXCTRL0=Cat(rxdata[8], rxdata[18]),
-                o_RXCTRL1=Cat(rxdata[9], rxdata[19]),
-                o_RXDATA=Cat(rxdata[:8], rxdata[10:18]),
+                p_RX_DATA_WIDTH=dw,
+                p_RX_INT_DATAWIDTH=dw == 40,
+                o_RXCTRL0=Cat(*[rxdata[10*i+8] for i in range(nwords)]),
+                o_RXCTRL1=Cat(*[rxdata[10*i+9] for i in range(nwords)]),
+                o_RXDATA=Cat(*[rxdata[10*i:10*i+8] for i in range(nwords)]),
 
                 # RX electrical
                 i_RXPD=0b00,
@@ -435,29 +439,27 @@ class GTH(Module, AutoCSR):
         ]
 
         # tx data and prbs
-        self.submodules.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(20, True))
+        self.submodules.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(dw, True))
         self.comb += self.tx_prbs.config.eq(tx_prbs_config)
         self.comb += [
-            self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(2)])),
+            self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(nwords)])),
             If(tx_produce_square_wave,
                 # square wave @ linerate/20 for scope observation
-                txdata.eq(0b11111111110000000000)
+                txdata.eq((2**dw-1) & ~(2**(dw//2)-1))
             ).Else(
                 txdata.eq(self.tx_prbs.o)
             )
         ]
 
         # rx data and prbs
-        self.submodules.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(20, True))
+        self.submodules.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(dw, True))
         self.comb += [
             self.rx_prbs.config.eq(rx_prbs_config),
             rx_prbs_errors.eq(self.rx_prbs.errors)
         ]
-        self.comb += [
-            self.decoders[0].input.eq(rxdata[:10]),
-            self.decoders[1].input.eq(rxdata[10:]),
-            self.rx_prbs.i.eq(rxdata)
-        ]
+        for i in range(nwords):
+            self.comb += self.decoders[i].input.eq(rxdata[10*i:10*(i+1)])
+        self.comb += self.rx_prbs.i.eq(rxdata)
 
         # clock alignment
         if clock_aligner:
@@ -473,7 +475,7 @@ class GTH(Module, AutoCSR):
 
 
 class MultiGTH(Module, AutoCSR):
-    def __init__(self, plls, tx_pads, rx_pads, sys_clk_freq, **kwargs):
+    def __init__(self, plls, tx_pads, rx_pads, sys_clk_freq, dw=20, **kwargs):
         self.nlanes = nlanes = len(tx_pads.p)
 
         class EncoderExposer:
@@ -481,9 +483,11 @@ class MultiGTH(Module, AutoCSR):
                 self.k = Signal()
                 self.d = Signal(8)
 
+        nwords = dw//10
+
         self.gths = [None for i in range(nlanes)]
-        self.encoders = [EncoderExposer() for i in range(2*nlanes)]
-        self.decoders = [None for i in range(2*nlanes)]
+        self.encoders = [EncoderExposer() for i in range(nwords*nlanes)]
+        self.decoders = [None for i in range(nwords*nlanes)]
         self.rx_ready = Signal()
 
         # # #
@@ -497,15 +501,15 @@ class MultiGTH(Module, AutoCSR):
 
         rx_ready = Signal(reset=1)
         for i in range(nlanes):
-            gth = GTH(plls[i], get_pads(tx_pads, i), get_pads(rx_pads, i), sys_clk_freq, **kwargs)
+            gth = GTH(plls[i], get_pads(tx_pads, i), get_pads(rx_pads, i), sys_clk_freq, dw=dw, **kwargs)
             self.gths[i] = gth
             setattr(self.submodules, "gth"+str(i), gth)
-            for j in range(2):
+            for j in range(nwords):
                 self.comb += [
-                    gth.encoder.k[j].eq(self.encoders[2*i + j].k),
-                    gth.encoder.d[j].eq(self.encoders[2*i + j].d)
+                    gth.encoder.k[j].eq(self.encoders[nwords*i + j].k),
+                    gth.encoder.d[j].eq(self.encoders[nwords*i + j].d)
                 ]
-                self.decoders[2*i + j] = gth.decoders[j]
+                self.decoders[nwords*i + j] = gth.decoders[j]
             new_rx_ready = Signal()
             self.comb += new_rx_ready.eq(rx_ready & gth.rx_ready)
             rx_ready = new_rx_ready
