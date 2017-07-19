@@ -146,7 +146,7 @@ class AMCRTMLinkTestSoC(SoCCore):
     }
     csr_map.update(SoCCore.csr_map)
     def __init__(self, platform, dac=0):
-        clk_freq = int(1e9/platform.default_clk_period)
+        clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
             csr_data_width=32,
