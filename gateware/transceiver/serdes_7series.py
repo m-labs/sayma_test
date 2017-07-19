@@ -197,7 +197,7 @@ class SERDES(Module, AutoCSR):
         ]
 
         # rx clock
-        use_bufr = False
+        use_bufr = True
         if mode == "slave":
             clk_i = Signal()
 

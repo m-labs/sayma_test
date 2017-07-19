@@ -4,6 +4,7 @@ sys.path.append("gateware") # FIXME
 
 from litex.gen import *
 from litex.soc.interconnect.csr import *
+from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.build.generic_platform import *
 from litex.build.xilinx import XilinxPlatform
@@ -43,13 +44,13 @@ _io = [
 
     # amc_rtm_link
     ("amc_rtm_link", 0,
-        Subsignal("clk_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("clk_n", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("tx_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("tx_n", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("rx_p", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        Subsignal("rx_n", Pins("FIXME"), Misc("DIFF_TERM=TRUE")),
-        IOStandard("LVDS_25"),
+        Subsignal("clk_p", Pins("R18")), # rtm_fpga_usr_io_p
+        Subsignal("clk_n", Pins("T18")), # rtm_fpga_usr_io_n
+        Subsignal("tx_p", Pins("R16")), # rtm_fpga_lvds1_p
+        Subsignal("tx_n", Pins("R17")), # rtm_fpga_lvds1_n
+        Subsignal("rx_p", Pins("T17")), # rtm_fpga_lvds2_p
+        Subsignal("rx_n", Pins("U17")), # rtm_fpga_lvds2_n
+        IOStandard("LVDS_25")
     ),
 ]
 
@@ -61,6 +62,50 @@ class Platform(XilinxPlatform):
     def __init__(self):
         XilinxPlatform.__init__(self, "xc7a15t-csg325-1", _io,
             toolchain="vivado")
+
+
+class _CRG(Module):
+    def __init__(self, platform):
+        self.clock_domains.cd_sys = ClockDomain()
+        self.clock_domains.cd_clk200 = ClockDomain()
+
+        clk50 = platform.request("clk50")
+
+        pll_locked = Signal()
+        pll_fb = Signal()
+        pll_sys = Signal()
+        pll_clk200 = Signal()
+        self.specials += [
+            Instance("PLLE2_BASE",
+                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
+
+                     # VCO @ 1GHz
+                     p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=20.0,
+                     p_CLKFBOUT_MULT=20, p_DIVCLK_DIVIDE=1,
+                     i_CLKIN1=clk50, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
+
+                     # 125MHz
+                     p_CLKOUT0_DIVIDE=8, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys,
+
+                     # 200MHz
+                     p_CLKOUT3_DIVIDE=5, p_CLKOUT3_PHASE=0.0, o_CLKOUT3=pll_clk200
+            ),
+            Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
+            Instance("BUFG", i_I=pll_clk200, o_O=self.cd_clk200.clk),
+            AsyncResetSynchronizer(self.cd_sys, ~pll_locked),
+            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked),
+        ]
+
+        reset_counter = Signal(4, reset=15)
+        ic_reset = Signal(reset=1)
+        self.sync.clk200 += \
+            If(reset_counter != 0,
+                reset_counter.eq(reset_counter - 1)
+            ).Else(
+                ic_reset.eq(0)
+            )
+        self.specials += Instance("IDELAYCTRL", p_SIM_DEVICE="ULTRASCALE",
+            i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
 
 class JESDTestSoC(SoCCore):
@@ -110,7 +155,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             ident="Sayma AMC RTM Link Test Design",
             with_timer=False
         )
-        self.submodules.crg = CRG(platform.request(platform.default_clk_name))
+        self.submodules.crg = _CRG(platform)
 
         # uart <--> wishbone
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
@@ -121,12 +166,10 @@ class AMCRTMLinkTestSoC(SoCCore):
         platform.add_period_constraint(self.crg.cd_sys.clk, 10.0)
 
         # slave
-
         slave_pll = SERDESPLL(125e6, 1.25e9)
-        self.comb += slave_pll.refclk.eq(ClockSignal()) # FIXME (generate 125MHz clock)
         self.submodules += slave_pll
 
-        slave_pads = platform.request("amc_rtm_link", 0)
+        slave_pads = platform.request("amc_rtm_link")
         self.submodules.slave_serdes = slave_serdes = SERDES(
             slave_pll, slave_pads, mode="slave")
 
@@ -148,22 +191,6 @@ class AMCRTMLinkTestSoC(SoCCore):
             slave_serdes.encoder.d[0].eq(counter),
             slave_serdes.encoder.d[1].eq(counter)
         ]
-
-        slave_sys_counter = Signal(32)
-        self.sync.sys += slave_sys_counter.eq(slave_sys_counter + 1)
-        #self.comb += platform.request("user_led", 4).eq(slave_sys_counter[26]) # FIXME
-
-        slave_serdes_counter = Signal(32)
-        self.sync.serdes += slave_serdes_counter.eq(slave_serdes_counter + 1)
-        #self.comb += platform.request("user_led", 5).eq(slave_serdes_counter[26]) # FIXME
-
-        slave_serdes_2p5x_counter = Signal(32)
-        self.sync.serdes_2p5x += slave_serdes_2p5x_counter.eq(slave_serdes_2p5x_counter + 1)
-        #self.comb += platform.request("user_led", 6).eq(slave_serdes_2p5x_counter[26]) # FIXME
-
-        slave_serdes_10x_counter = Signal(32)
-        self.sync.serdes_10x += slave_serdes_10x_counter.eq(slave_serdes_10x_counter + 1)
-        #self.comb += platform.request("user_led", 7).eq(slave_serdes_10x_counter[26]) # FIXME
 
         analyzer_signals = [
             slave_serdes.encoder.k[0],
