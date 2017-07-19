@@ -104,8 +104,7 @@ class _CRG(Module):
             ).Else(
                 ic_reset.eq(0)
             )
-        self.specials += Instance("IDELAYCTRL", p_SIM_DEVICE="ULTRASCALE",
-            i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
+        self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
 
 class JESDTestSoC(SoCCore):
@@ -211,7 +210,7 @@ class AMCRTMLinkTestSoC(SoCCore):
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):
-            self.analyzer.export_csv(vns, "test/analyzer.csv")
+            self.analyzer.export_csv(vns, "test/sayma_rtm/analyzer.csv")
 
 
 def main():
@@ -223,7 +222,7 @@ def main():
         soc = JESDTestSoC(platform)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
-    builder = Builder(soc, output_dir="build_sayma_rtm", csr_csv="test/csr.csv")
+    builder = Builder(soc, output_dir="build_sayma_rtm", csr_csv="test/sayma_rtm/csr.csv")
     vns = builder.build()
 
 

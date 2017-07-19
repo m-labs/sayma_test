@@ -450,7 +450,7 @@ class SDRAMTestSoC(SoCSDRAM):
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):
-            self.analyzer.export_csv(vns, "test/analyzer.csv")
+            self.analyzer.export_csv(vns, "test/sayma_amc/analyzer.csv")
 
 
 def get_phy_pads(jesd_pads, n):
@@ -718,7 +718,7 @@ class AMCRTMLinkTestSoC(SoCCore):
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):
-            self.analyzer.export_csv(vns, "test/analyzer.csv")
+            self.analyzer.export_csv(vns, "test/sayma_amc/analyzer.csv")
 
 
 def main():
@@ -742,7 +742,7 @@ def main():
         soc = DRTIOTestSoC(platform)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
-    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/csr.csv",
+    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/sayma_amc/csr.csv",
         compile_gateware=compile_gateware)
     vns = builder.build()
     soc.do_exit(vns)
