@@ -46,10 +46,10 @@ _io = [
     ("amc_rtm_link", 0,
         Subsignal("clk_p", Pins("R18")), # rtm_fpga_usr_io_p
         Subsignal("clk_n", Pins("T18")), # rtm_fpga_usr_io_n
-        Subsignal("tx_p", Pins("R16")), # rtm_fpga_lvds1_p
-        Subsignal("tx_n", Pins("R17")), # rtm_fpga_lvds1_n
-        Subsignal("rx_p", Pins("T17")), # rtm_fpga_lvds2_p
-        Subsignal("rx_n", Pins("U17")), # rtm_fpga_lvds2_n
+        Subsignal("rx_p", Pins("R16")), # rtm_fpga_lvds1_p
+        Subsignal("rx_n", Pins("R17")), # rtm_fpga_lvds1_n
+        Subsignal("tx_p", Pins("T17")), # rtm_fpga_lvds2_p
+        Subsignal("tx_n", Pins("U17")), # rtm_fpga_lvds2_n
         IOStandard("LVDS_25")
     ),
 ]
@@ -224,6 +224,7 @@ def main():
         soc = AMCRTMLinkTestSoC(platform)
     builder = Builder(soc, output_dir="build_sayma_rtm", csr_csv="test/sayma_rtm/csr.csv")
     vns = builder.build()
+    soc.do_exit(vns)
 
 
 if __name__ == "__main__":

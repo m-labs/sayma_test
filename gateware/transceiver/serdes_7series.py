@@ -322,8 +322,8 @@ class SERDES(Module, AutoCSR):
             self.rx_gearbox.i.eq(serdes_m_q),
             self.rx_bitslip.value.eq(rx_bitslip_value),
             self.rx_bitslip.i.eq(self.rx_gearbox.o),
-            rx_pattern.eq(self.rx_gearbox.o),
             self.decoders[0].input.eq(self.rx_bitslip.o[:10]),
             self.decoders[1].input.eq(self.rx_bitslip.o[10:]),
+            rx_pattern.eq(self.rx_bitslip.o),
             self.rx_prbs.i.eq(self.rx_bitslip.o)
         ]
