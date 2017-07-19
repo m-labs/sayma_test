@@ -55,6 +55,9 @@ _io = [
         IOStandard("LVCMOS18")
     ),
 
+    ("usr_uart_p", 1, Pins("H27"), IOStandard("LVCMOS18")),
+    ("usr_uart_n", 1, Pins("G27"), IOStandard("LVCMOS18")),
+
     # sdram
     ("ddram_64", 0,
         Subsignal("a", Pins(
@@ -659,6 +662,13 @@ class AMCRTMLinkTestSoC(SoCCore):
 
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
+
+        # amc <--> rtm usr_uart / aux_uart redirection
+        aux_uart_pads = platform.request("serial", 1)
+        self.comb += [
+            aux_uart_pads.tx.eq(platform.request("usr_uart_p")),
+            platform.request("usr_uart_n").eq(aux_uart_pads.rx)
+        ]
 
         # amc rtm link master
         master_pll = SERDESPLL(125e6, 1.25e9)
