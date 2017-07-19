@@ -240,14 +240,12 @@ class SERDES(Module, AutoCSR):
 
         serdes_m_i_delayed = Signal()
         serdes_m_q = Signal(8)
-        serdes_m_idelay_value = int(1/(4*pll.linerate)/78e-12) # 1/4 bit period
-        assert serdes_m_idelay_value < 32
         self.specials += [
             Instance("IDELAYE2",
                 p_DELAY_SRC="IDATAIN", p_SIGNAL_PATTERN="DATA",
                 p_CINVCTRL_SEL="FALSE", p_HIGH_PERFORMANCE_MODE="TRUE",
                 p_REFCLK_FREQUENCY=200.0, p_PIPE_SEL="FALSE",
-                p_IDELAY_TYPE="VARIABLE", p_IDELAY_VALUE=serdes_m_idelay_value,
+                p_IDELAY_TYPE="VARIABLE", p_IDELAY_VALUE=0,
 
                 i_C=ClockSignal(),
                 i_LD=self.rx_delay_rst.re,
@@ -277,7 +275,7 @@ class SERDES(Module, AutoCSR):
 
         serdes_s_i_delayed = Signal()
         serdes_s_q = Signal(8)
-        serdes_s_idelay_value = int(1/(2*pll.linerate)/78e-12) # 1/2 bit period
+        serdes_s_idelay_value = int(1/(4*pll.linerate)/78e-12) # 1/4 bit period
         assert serdes_s_idelay_value < 32
         self.specials += [
             Instance("IDELAYE2",
