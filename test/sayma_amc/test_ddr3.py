@@ -21,7 +21,7 @@ dfii_command_ras    = 0x08
 dfii_command_wrdata = 0x10
 dfii_command_rddata = 0x20
 
-wb = RemoteClient(debug=False)
+wb = RemoteClient(port=1234, debug=False)
 wb.open()
 
 # # #

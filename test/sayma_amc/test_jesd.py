@@ -2,7 +2,7 @@
 
 from litex.soc.tools.remote import RemoteClient
 
-wb = RemoteClient()
+wb = RemoteClient(port=1234, debug=False)
 wb.open()
 
 

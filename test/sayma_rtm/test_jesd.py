@@ -4,7 +4,7 @@ from litex.soc.tools.remote import RemoteClient
 
 from litejesd204b.common import *
 
-wb = RemoteClient()
+wb = RemoteClient(port=1234, debug=False)
 wb.open()
 
 
