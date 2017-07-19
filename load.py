@@ -9,14 +9,14 @@ def load_sayma_amc():
     prog = VivadoProgrammer()
     prog.load_bitstream(
         bitstream_file="build_sayma_amc/gateware/top.bit",
-        target="localhost:3121/xilinx_tcf/Digilent/210249810959")
+        device=0)
 
 
 def load_sayma_rtm():
     prog = VivadoProgrammer()
     prog.load_bitstream(
         bitstream_file="build_sayma_rtm/gateware/top.bit",
-        target="FIXME")
+        device=1)
 
 
 def main():
