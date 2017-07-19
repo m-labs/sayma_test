@@ -24,8 +24,8 @@ _io = [
 
     # serial
     ("serial", 0,
-        Subsignal("tx", Pins("B17")),
-        Subsignal("rx", Pins("C16")),
+        Subsignal("tx", Pins("C16")),
+        Subsignal("rx", Pins("B17")),
         IOStandard("LVCMOS25")
     ),
 
