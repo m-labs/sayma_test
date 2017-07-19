@@ -14,7 +14,7 @@ from litex.soc.integration.builder import *
 from litex.soc.cores.uart import UARTWishboneBridge
 from litex.soc.cores.spi import SPIMaster
 
-from transceiver.serdes_7series import SERDESPLL, SERDES
+from transceiver.serdes_7series import SERDESPLL, SERDES, SERDESInitSlave
 
 from litescope import LiteScopeAnalyzer
 
@@ -141,8 +141,8 @@ class JESDTestSoC(SoCCore):
 
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "slave_serdes": 21,
-        "analyzer": 22
+        "slave_serdes_init": 20,
+        "analyzer":          30
     }
     csr_map.update(SoCCore.csr_map)
     def __init__(self, platform, dac=0):
@@ -151,7 +151,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC RTM Link Test Design",
+            ident="Sayma RTM / AMC <--> RTM Link Test Design",
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
@@ -171,6 +171,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         slave_pads = platform.request("amc_rtm_link")
         self.submodules.slave_serdes = slave_serdes = SERDES(
             slave_pll, slave_pads, mode="slave")
+        self.submodules.slave_serdes_init = slave_serdes_init = SERDESInitSlave(slave_serdes)
 
         slave_serdes.cd_serdes.clk.attr.add("keep")
         slave_serdes.cd_serdes_10x.clk.attr.add("keep")
@@ -205,6 +206,16 @@ class AMCRTMLinkTestSoC(SoCCore):
             slave_serdes.decoders[1].input,
             slave_serdes.decoders[1].d,
             slave_serdes.decoders[1].k,
+
+            slave_serdes.rx_pattern,
+            slave_serdes.rx_bitslip_value,
+            slave_serdes.rx_delay_rst,
+            slave_serdes.rx_delay_inc,
+            slave_serdes.rx_delay_ce,
+            slave_serdes_init.debug,
+            slave_serdes_init.ready,
+            slave_serdes_init.delay,
+            slave_serdes_init.bitslip
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
 

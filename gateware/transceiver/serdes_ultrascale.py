@@ -1,12 +1,11 @@
 from litex.gen import *
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 from litex.gen.genlib.cdc import MultiReg, PulseSynchronizer, Gearbox
-from litex.gen.genlib.misc import BitSlip
+from litex.gen.genlib.misc import BitSlip, WaitTimer
 
 from litex.soc.interconnect.csr import *
 from litex.soc.cores.code_8b10b import Encoder, Decoder
 
-from transceiver.prbs import *
 from transceiver.phase_detector import PhaseDetector
 
 
@@ -18,7 +17,6 @@ class SERDESPLL(Module):
         self.refclk = Signal()
         self.serdes_clk = Signal()
         self.serdes_10x_clk = Signal()
-        self.serdes_10x_90_clk = Signal()
         self.serdes_2p5x_clk = Signal()
 
         # refclk: 125MHz
@@ -62,23 +60,18 @@ class SERDESPLL(Module):
         self.comb += self.lock.eq(pll_locked)
 
 
-class SERDES(Module, AutoCSR):
+class SERDES(Module):
     def __init__(self, pll, pads, mode="master"):
-        self.tx_pattern = CSRStorage(20)
-        self.tx_produce_square_wave = CSRStorage()
-        self.tx_prbs_config = CSRStorage(2)
+        self.tx_pattern = Signal(20)
+        self.tx_pattern_en = Signal()
 
-        self.rx_pattern = CSRStatus(20)
-        self.rx_prbs_config = CSRStorage(2)
-        self.rx_prbs_errors = CSRStatus(32)
+        self.rx_pattern = Signal(20)
 
-        self.rx_bitslip_value = CSRStorage(5)
-        self.rx_delay_rst = CSR()
-        self.rx_delay_en_vtc = CSRStorage(reset=1)
-        self.rx_delay_inc = CSRStorage()
-        self.rx_delay_ce = CSR()
-        self.rx_delay_m_cntvalueout = CSRStatus(9)
-        self.rx_delay_s_cntvalueout = CSRStatus(9)
+        self.rx_bitslip_value = Signal(5)
+        self.rx_delay_rst = Signal()
+        self.rx_delay_inc = Signal()
+        self.rx_delay_ce = Signal()
+        self.rx_delay_en_vtc = Signal()
 
         # # #
 
@@ -96,68 +89,53 @@ class SERDES(Module, AutoCSR):
         # - linerate/10 pll refclk provided by clk_pads
         self.clock_domains.cd_serdes = ClockDomain()
         self.clock_domains.cd_serdes_10x = ClockDomain()
-        self.clock_domains.cd_serdes_10x_90 = ClockDomain()
         self.clock_domains.cd_serdes_2p5x = ClockDomain()
         self.comb += [
             self.cd_serdes.clk.eq(pll.serdes_clk),
             self.cd_serdes_10x.clk.eq(pll.serdes_10x_clk),
-            self.cd_serdes_10x_90.clk.eq(pll.serdes_10x_90_clk),
             self.cd_serdes_2p5x.clk.eq(pll.serdes_2p5x_clk)
         ]
         self.specials += [
             AsyncResetSynchronizer(self.cd_serdes, ~pll.lock),
             AsyncResetSynchronizer(self.cd_serdes_10x, ~pll.lock),
-            AsyncResetSynchronizer(self.cd_serdes_10x_90, ~pll.lock),
             AsyncResetSynchronizer(self.cd_serdes_2p5x, ~pll.lock)
         ]
 
         # control/status cdc
         tx_pattern = Signal(20)
-        tx_produce_square_wave = Signal()
-        tx_prbs_config = Signal(2)
+        tx_pattern_en = Signal()
 
         rx_pattern = Signal(20)
-        rx_prbs_config = Signal(2)
-        rx_prbs_errors = Signal(32)
 
         rx_bitslip_value = Signal(5)
         rx_delay_rst = Signal()
         rx_delay_inc = Signal()
         rx_delay_en_vtc = Signal()
         rx_delay_ce = Signal()
-        rx_delay_m_cntvalueout = Signal(9)
-        rx_delay_s_cntvalueout = Signal(9)
 
         self.specials += [
-            MultiReg(self.tx_pattern.storage, tx_pattern, "serdes"),
-            MultiReg(self.tx_produce_square_wave.storage, tx_produce_square_wave, "serdes"),
-            MultiReg(self.tx_prbs_config.storage, tx_prbs_config, "serdes")
+            MultiReg(self.tx_pattern, tx_pattern, "serdes"),
+            MultiReg(self.tx_pattern_en, tx_pattern_en, "serdes")
         ]
 
         self.specials += [
-            MultiReg(rx_pattern, self.rx_pattern.status, "sys"),
-            MultiReg(self.rx_prbs_config.storage, rx_prbs_config, "serdes"),
-            MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys") # FIXME
+            MultiReg(rx_pattern, self.rx_pattern, "sys"),
         ]
 
         self.specials += [
-            MultiReg(self.rx_bitslip_value.storage, rx_bitslip_value, "serdes"),
-            MultiReg(self.rx_delay_inc.storage, rx_delay_inc, "serdes_2p5x"),
-            MultiReg(self.rx_delay_en_vtc.storage, rx_delay_en_vtc, "serdes_2p5x")
+            MultiReg(self.rx_bitslip_value, rx_bitslip_value, "serdes"),
+            MultiReg(self.rx_delay_inc, rx_delay_inc, "serdes_2p5x"),
+            MultiReg(self.rx_delay_en_vtc, rx_delay_en_vtc, "serdes_2p5x")
         ]
         self.submodules.do_rx_delay_rst = PulseSynchronizer("sys", "serdes_2p5x")
         self.comb += [
             rx_delay_rst.eq(self.do_rx_delay_rst.o),
-            self.do_rx_delay_rst.i.eq(self.rx_delay_rst.re)
+            self.do_rx_delay_rst.i.eq(self.rx_delay_rst)
         ]
         self.submodules.do_rx_delay_ce = PulseSynchronizer("sys", "serdes_2p5x")
         self.comb += [
             rx_delay_ce.eq(self.do_rx_delay_ce.o),
-            self.do_rx_delay_ce.i.eq(self.rx_delay_ce.re)
-        ]
-        self.specials += [
-            MultiReg(rx_delay_m_cntvalueout, self.rx_delay_m_cntvalueout.status, "sys"),
-            MultiReg(rx_delay_s_cntvalueout, self.rx_delay_s_cntvalueout.status, "sys"),
+            self.do_rx_delay_ce.i.eq(self.rx_delay_ce)
         ]
 
         # tx clock (linerate/10)
@@ -183,19 +161,13 @@ class SERDES(Module, AutoCSR):
                 )
             ]
 
-        # tx data and prbs
-        self.submodules.tx_prbs = ClockDomainsRenamer("serdes")(PRBSTX(20, True))
-        self.comb += self.tx_prbs.config.eq(tx_prbs_config)
+        # tx data
         self.submodules.tx_gearbox = Gearbox(20, "serdes", 8, "serdes_2p5x")
         self.sync.serdes += [
-            self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(2)])),
-            If(tx_pattern != 0,
+            If(tx_pattern_en,
                 self.tx_gearbox.i.eq(tx_pattern)
-            ).Elif(tx_produce_square_wave,
-                # square wave @ linerate/20 for scope observation
-                self.tx_gearbox.i.eq(0b11111111110000000000)
             ).Else(
-                self.tx_gearbox.i.eq(self.tx_prbs.o)
+                self.tx_gearbox.i.eq(Cat(*[self.encoder.output[i] for i in range(2)]))
             )
         ]
 
@@ -221,6 +193,7 @@ class SERDES(Module, AutoCSR):
         use_bufr = True
         if mode == "slave":
             clk_i = Signal()
+
             clk_i_bufg = Signal()
             self.specials += [
                 Instance("IBUFDS",
@@ -273,8 +246,7 @@ class SERDES(Module, AutoCSR):
                 i_INC=rx_delay_inc, i_EN_VTC=rx_delay_en_vtc,
                 i_CE=rx_delay_ce,
 
-                i_IDATAIN=serdes_m_i_nodelay, o_DATAOUT=serdes_m_i_delayed,
-                o_CNTVALUEOUT=rx_delay_m_cntvalueout
+                i_IDATAIN=serdes_m_i_nodelay, o_DATAOUT=serdes_m_i_delayed
             ),
             Instance("ISERDESE3",
                 p_DATA_WIDTH=8,
@@ -304,9 +276,7 @@ class SERDES(Module, AutoCSR):
                 i_INC=rx_delay_inc, i_EN_VTC=rx_delay_en_vtc,
                 i_CE=rx_delay_ce,
 
-                i_IDATAIN=serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed,
-                o_CNTVALUEOUT=rx_delay_s_cntvalueout
-
+                i_IDATAIN=serdes_s_i_nodelay, o_DATAOUT=serdes_s_i_delayed
             ),
             Instance("ISERDESE3",
                 p_DATA_WIDTH=8,
@@ -321,12 +291,7 @@ class SERDES(Module, AutoCSR):
         ]
         self.comb += self.phase_detector.sdata.eq(~serdes_s_q)
 
-        # rx data and prbs
-        self.submodules.rx_prbs = ClockDomainsRenamer("serdes")(PRBSRX(20, True))
-        self.comb += [
-            self.rx_prbs.config.eq(rx_prbs_config),
-            rx_prbs_errors.eq(self.rx_prbs.errors)
-        ]
+        # rx data
         self.comb += [
             self.rx_gearbox.i.eq(serdes_m_q),
             self.rx_bitslip.value.eq(rx_bitslip_value),
@@ -334,5 +299,110 @@ class SERDES(Module, AutoCSR):
             self.decoders[0].input.eq(self.rx_bitslip.o[:10]),
             self.decoders[1].input.eq(self.rx_bitslip.o[10:]),
             rx_pattern.eq(self.rx_bitslip.o),
-            self.rx_prbs.i.eq(self.rx_bitslip.o)
         ]
+
+
+# master <--> slave synchronization scheme
+# 1)  master emits continous 0
+# 2)  slave detects 20 zero bits and reset itself (20 zero bits is not possible with 8b10b)
+# 3)  master emits sync_pattern
+# 4)  slave emits continuous 0, synchronizes to sync_pattern
+# 5)  slave emits sync_pattern
+# 6)  master synchronize to sync_pattern
+# 7)  master stop sending sync_pattern
+# 9)  slave detects end of sync_pattern and stops emiting sync_pattern
+# 10) link is ready
+# 11) TODO: enable phase correction on both side using phase detector
+
+class SERDESInitMaster(Module, AutoCSR):
+    def __init__(self, serdes, sync_pattern=0x12345, ndelays=512, nbitslips=20):
+        self.reset = CSRStorage()
+        self.ready = Signal()
+        self.debug = Signal(8)
+
+        # # #
+
+        self.delay = delay = Signal(max=ndelays)
+        self.bitslip = bitslip = Signal(max=nbitslips)
+
+        timer = WaitTimer(4096)
+        self.submodules += timer
+
+        self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
+        self.comb += self.fsm.reset.eq(self.reset.storage)
+
+        fsm.act("IDLE",
+            self.debug.eq(0),
+            NextState("RESET_SLAVE"),
+            serdes.tx_pattern_en.eq(1),
+            serdes.tx_pattern.eq(0x00000)
+        )
+        fsm.act("RESET_SLAVE",
+            self.debug.eq(1),
+            timer.wait.eq(1),
+            If(timer.done,
+                timer.wait.eq(0),
+                NextState("SEND_PATTERN")
+            ),
+            serdes.tx_pattern_en.eq(1),
+            serdes.tx_pattern.eq(0x00000)
+        )
+        fsm.act("SEND_PATTERN",
+            self.debug.eq(2),
+            # detect when slave stop sending zeroes
+            If(serdes.rx_pattern != 0,
+                NextState("WAIT_STABILIZATION")
+            ),
+            serdes.tx_pattern_en.eq(1),
+            serdes.tx_pattern.eq(sync_pattern)
+        )
+        fsm.act("WAIT_STABILIZATION",
+            self.debug.eq(3),
+            timer.wait.eq(1),
+            If(timer.done,
+                timer.wait.eq(0),
+                NextState("CHECK_PATTERN")
+            ),
+            serdes.tx_pattern_en.eq(1),
+            serdes.tx_pattern.eq(sync_pattern)
+        )
+        fsm.act("CHECK_PATTERN",
+            self.debug.eq(4),
+            If(serdes.rx_pattern == sync_pattern,
+                timer.wait.eq(1),
+                If(timer.done,
+                    NextState("READY")
+                )
+            ).Else(
+                NextState("UPDATE_PARAMS")
+            ),
+            serdes.tx_pattern_en.eq(1),
+            serdes.tx_pattern.eq(sync_pattern),
+        )
+        self.comb += serdes.rx_bitslip_value.eq(bitslip)
+        fsm.act("UPDATE_PARAMS",
+            self.debug.eq(5),
+            # if last delay tap, increment bitslip
+            If(delay == (ndelays - 1),
+                If(bitslip == (nbitslips - 1),
+                    NextValue(bitslip, 0)
+                ).Else(    
+                    NextValue(bitslip, bitslip + 1)
+                ),
+                NextValue(delay, 0),
+                serdes.rx_delay_rst.eq(1)
+            # increment delay
+            ).Else(
+                NextValue(delay, delay + 1),
+                serdes.rx_delay_inc.eq(1),
+                serdes.rx_delay_ce.eq(1)
+            ),
+            NextState("WAIT_STABILIZATION"),
+            serdes.tx_pattern_en.eq(1),
+            serdes.tx_pattern.eq(sync_pattern)
+        )
+       
+        fsm.act("READY",
+            self.debug.eq(6),
+            self.ready.eq(1)
+        )

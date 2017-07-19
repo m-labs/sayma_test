@@ -26,7 +26,7 @@ from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
 
 from transceiver.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
-from transceiver.serdes_ultrascale import SERDESPLL, SERDES
+from transceiver.serdes_ultrascale import SERDESPLL, SERDES, SERDESInitMaster
 
 from gateware import firmware
 
@@ -631,9 +631,8 @@ class DRTIOTestSoC(SoCCore):
 
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "master_serdes": 20,
-        "slave_serdes":  21,
-        "analyzer":      30
+        "master_serdes_init": 20,
+        "analyzer":           30
     }
     csr_map.update(SoCCore.csr_map)
 
@@ -643,7 +642,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC RTM Link Test Design",
+            ident="Sayma AMC / AMC <--> RTM Link Test Design",
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
@@ -669,6 +668,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         master_pads = platform.request("amc_rtm_link")
         self.submodules.master_serdes = master_serdes = SERDES(
             master_pll, master_pads, mode="master")
+        self.submodules.master_serdes_init = master_serdes_init = SERDESInitMaster(master_serdes)
 
         master_serdes.cd_serdes.clk.attr.add("keep")
         master_serdes.cd_serdes_10x.clk.attr.add("keep")
@@ -712,7 +712,17 @@ class AMCRTMLinkTestSoC(SoCCore):
             master_serdes.decoders[0].k,
             master_serdes.decoders[1].input,
             master_serdes.decoders[1].d,
-            master_serdes.decoders[1].k
+            master_serdes.decoders[1].k,
+
+            master_serdes.rx_pattern,
+            master_serdes.rx_bitslip_value,
+            master_serdes.rx_delay_rst,
+            master_serdes.rx_delay_inc,
+            master_serdes.rx_delay_ce,
+            master_serdes_init.debug,
+            master_serdes_init.ready,
+            master_serdes_init.delay,
+            master_serdes_init.bitslip
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
 
