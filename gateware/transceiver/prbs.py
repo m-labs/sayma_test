@@ -102,18 +102,18 @@ class PRBSChecker(Module):
 
 
 class PRBS7Checker(PRBSChecker):
-    def __init__(self, n_out):
-        PRBSChecker.__init__(self, n_out, n_state=7, taps=[5, 6])
+    def __init__(self, n_in):
+        PRBSChecker.__init__(self, n_in, n_state=7, taps=[5, 6])
 
 
 class PRBS15Checker(PRBSChecker):
-    def __init__(self, n_out):
-        PRBSChecker.__init__(self, n_out, n_state=15, taps=[13, 14])
+    def __init__(self, n_in):
+        PRBSChecker.__init__(self, n_in, n_state=15, taps=[13, 14])
 
 
 class PRBS31Checker(PRBSChecker):
-    def __init__(self, n_out):
-        PRBSChecker.__init__(self, n_out, n_state=31, taps=[27, 30])
+    def __init__(self, n_in):
+        PRBSChecker.__init__(self, n_in, n_state=31, taps=[27, 30])
 
 
 class PRBSRX(Module):

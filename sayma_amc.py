@@ -26,7 +26,8 @@ from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
 
 from transceiver.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
-from transceiver.serdes_ultrascale import SERDESPLL, SERDES, SERDESInitMaster
+
+from amc_rtm_link.phy import AMCMasterPLL, AMCMasterSerdes, AMCMasterInit
 
 from gateware import firmware
 
@@ -375,75 +376,30 @@ class SDRAMTestSoC(SoCSDRAM):
 
         # analyzer
         if not with_cpu:
-            dfi_phase0_group = [
-                self.ddrphy.dfi.phases[0].address,
-                self.ddrphy.dfi.phases[0].bank,
-                self.ddrphy.dfi.phases[0].ras_n,
-                self.ddrphy.dfi.phases[0].cas_n,
-                self.ddrphy.dfi.phases[0].we_n,
-                self.ddrphy.dfi.phases[0].cs_n,
-                self.ddrphy.dfi.phases[0].cke,
-                self.ddrphy.dfi.phases[0].odt,
-                self.ddrphy.dfi.phases[0].reset_n,
-                self.ddrphy.dfi.phases[0].wrdata_en,
-                self.ddrphy.dfi.phases[0].wrdata_mask,
-                self.ddrphy.dfi.phases[0].wrdata,
-                self.ddrphy.dfi.phases[0].rddata,
-                self.ddrphy.dfi.phases[0].rddata_valid
-            ]
-            dfi_phase1_group = [
-                self.ddrphy.dfi.phases[1].address,
-                self.ddrphy.dfi.phases[1].bank,
-                self.ddrphy.dfi.phases[1].ras_n,
-                self.ddrphy.dfi.phases[1].cas_n,
-                self.ddrphy.dfi.phases[1].we_n,
-                self.ddrphy.dfi.phases[1].cs_n,
-                self.ddrphy.dfi.phases[1].cke,
-                self.ddrphy.dfi.phases[1].odt,
-                self.ddrphy.dfi.phases[1].reset_n,
-                self.ddrphy.dfi.phases[1].wrdata_en,
-                self.ddrphy.dfi.phases[1].wrdata_mask,
-                self.ddrphy.dfi.phases[1].wrdata,
-                self.ddrphy.dfi.phases[1].rddata,
-                self.ddrphy.dfi.phases[1].rddata_valid
-            ]
-            dfi_phase2_group = [
-                self.ddrphy.dfi.phases[2].address,
-                self.ddrphy.dfi.phases[2].bank,
-                self.ddrphy.dfi.phases[2].ras_n,
-                self.ddrphy.dfi.phases[2].cas_n,
-                self.ddrphy.dfi.phases[2].we_n,
-                self.ddrphy.dfi.phases[2].cs_n,
-                self.ddrphy.dfi.phases[2].cke,
-                self.ddrphy.dfi.phases[2].odt,
-                self.ddrphy.dfi.phases[2].reset_n,
-                self.ddrphy.dfi.phases[2].wrdata_en,
-                self.ddrphy.dfi.phases[2].wrdata_mask,
-                self.ddrphy.dfi.phases[2].wrdata,
-                self.ddrphy.dfi.phases[2].rddata,
-                self.ddrphy.dfi.phases[2].rddata_valid
-            ]
-            dfi_phase3_group = [
-                self.ddrphy.dfi.phases[3].address,
-                self.ddrphy.dfi.phases[3].bank,
-                self.ddrphy.dfi.phases[3].ras_n,
-                self.ddrphy.dfi.phases[3].cas_n,
-                self.ddrphy.dfi.phases[3].we_n,
-                self.ddrphy.dfi.phases[3].cs_n,
-                self.ddrphy.dfi.phases[3].cke,
-                self.ddrphy.dfi.phases[3].odt,
-                self.ddrphy.dfi.phases[3].reset_n,
-                self.ddrphy.dfi.phases[3].wrdata_en,
-                self.ddrphy.dfi.phases[3].wrdata_mask,
-                self.ddrphy.dfi.phases[3].wrdata,
-                self.ddrphy.dfi.phases[3].rddata,
-                self.ddrphy.dfi.phases[3].rddata_valid
-            ]
+            dfi_phase_groups = []
+            for i in range(4):
+                dfi_phase_group = [
+                    self.ddrphy.dfi.phases[i].address,
+                    self.ddrphy.dfi.phases[i].bank,
+                    self.ddrphy.dfi.phases[i].ras_n,
+                    self.ddrphy.dfi.phases[i].cas_n,
+                    self.ddrphy.dfi.phases[i].we_n,
+                    self.ddrphy.dfi.phases[i].cs_n,
+                    self.ddrphy.dfi.phases[i].cke,
+                    self.ddrphy.dfi.phases[i].odt,
+                    self.ddrphy.dfi.phases[i].reset_n,
+                    self.ddrphy.dfi.phases[i].wrdata_en,
+                    self.ddrphy.dfi.phases[i].wrdata_mask,
+                    self.ddrphy.dfi.phases[i].wrdata,
+                    self.ddrphy.dfi.phases[i].rddata,
+                    self.ddrphy.dfi.phases[i].rddata_valid
+                ]
+                dfi_phase_groups.append(dfi_phase_group)
             analyzer_signals = {
-                0 : dfi_phase0_group,
-                1 : dfi_phase1_group,
-                2 : dfi_phase2_group,
-                3 : dfi_phase3_group
+                0 : dfi_phase_groups[0],
+                1 : dfi_phase_groups[1],
+                2 : dfi_phase_groups[2],
+                3 : dfi_phase_groups[3]
             }
             if not with_cpu:
                 self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 64)
@@ -631,11 +587,10 @@ class DRTIOTestSoC(SoCCore):
 
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "master_serdes_init": 20,
-        "analyzer":           30
+        "amc_rtm_link_init": 20,
+        "analyzer":          30
     }
     csr_map.update(SoCCore.csr_map)
-
     def __init__(self, platform):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
@@ -646,6 +601,8 @@ class AMCRTMLinkTestSoC(SoCCore):
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
+
+        # uart <--> wishbone
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
                                                   clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
@@ -660,69 +617,64 @@ class AMCRTMLinkTestSoC(SoCCore):
             platform.request("usr_uart_n").eq(aux_uart_pads.rx)
         ]
 
-        # amc rtm link master
-        master_pll = SERDESPLL(125e6, 1.25e9)
-        self.comb += master_pll.refclk.eq(ClockSignal())
-        self.submodules += master_pll
+        # amc rtm link
+        amc_rtm_link_pll = AMCMasterPLL()
+        self.comb += amc_rtm_link_pll.refclk.eq(ClockSignal())
+        self.submodules += amc_rtm_link_pll
 
-        master_pads = platform.request("amc_rtm_link")
-        self.submodules.master_serdes = master_serdes = SERDES(
-            master_pll, master_pads, mode="master")
-        self.submodules.master_serdes_init = master_serdes_init = SERDESInitMaster(master_serdes)
+        amc_rtm_link_pads = platform.request("amc_rtm_link")
+        amc_rtm_link_serdes = AMCMasterSerdes(amc_rtm_link_pll, amc_rtm_link_pads)
+        self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
+        amc_rtm_link_init = AMCMasterInit(amc_rtm_link_serdes)
+        self.submodules.amc_rtm_link_init = amc_rtm_link_init
 
-        master_serdes.cd_serdes.clk.attr.add("keep")
-        master_serdes.cd_serdes_10x.clk.attr.add("keep")
-        master_serdes.cd_serdes_2p5x.clk.attr.add("keep")
-        platform.add_period_constraint(master_serdes.cd_serdes.clk, 16.0),
-        platform.add_period_constraint(master_serdes.cd_serdes_10x.clk, 1.6),
-        platform.add_period_constraint(master_serdes.cd_serdes_2p5x.clk, 6.4)
+        amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
+        amc_rtm_link_serdes.cd_serdes_10x.clk.attr.add("keep")
+        amc_rtm_link_serdes.cd_serdes_2p5x.clk.attr.add("keep")
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes.clk, 16.0),
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_10x.clk, 1.6),
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_2p5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            master_serdes.cd_serdes.clk,
-            master_serdes.cd_serdes_10x.clk,
-            master_serdes.cd_serdes_2p5x.clk)
+            amc_rtm_link_serdes.cd_serdes.clk,
+            amc_rtm_link_serdes.cd_serdes_10x.clk,
+            amc_rtm_link_serdes.cd_serdes_2p5x.clk)
 
-        master_counter = Signal(32)
-        self.sync.serdes += master_counter.eq(master_counter + 1)
+        counter = Signal(32)
+        self.sync.serdes += counter.eq(counter + 1)
         self.comb += [
-            master_serdes.encoder.d[0].eq(master_counter),
-            master_serdes.encoder.d[1].eq(master_counter)
+            amc_rtm_link_serdes.encoder.d[0].eq(counter),
+            amc_rtm_link_serdes.encoder.d[1].eq(counter)
         ]
 
-        # leds
-        master_serdes_counter = Signal(32)
-        self.sync.serdes += master_serdes_counter.eq(master_serdes_counter + 1)
-        self.comb += platform.request("user_led", 0).eq(master_serdes_counter[26])
-
-        master_serdes_2p5x_counter = Signal(32)
-        self.sync.serdes_2p5x += master_serdes_2p5x_counter.eq(master_serdes_2p5x_counter + 1)
-        self.comb += platform.request("user_led", 1).eq(master_serdes_2p5x_counter[26])
-
-        # analyzer
         analyzer_signals = [
-            master_serdes.encoder.k[0],
-            master_serdes.encoder.d[0],
-            master_serdes.encoder.output[0],
-            master_serdes.encoder.k[1],
-            master_serdes.encoder.d[1],
-            master_serdes.encoder.output[1],
+            amc_rtm_link_serdes.encoder.k[0],
+            amc_rtm_link_serdes.encoder.d[0],
+            amc_rtm_link_serdes.encoder.output[0],
+            amc_rtm_link_serdes.encoder.k[1],
+            amc_rtm_link_serdes.encoder.d[1],
+            amc_rtm_link_serdes.encoder.output[1],
 
-            master_serdes.decoders[0].input,
-            master_serdes.decoders[0].d,
-            master_serdes.decoders[0].k,
-            master_serdes.decoders[1].input,
-            master_serdes.decoders[1].d,
-            master_serdes.decoders[1].k,
+            amc_rtm_link_serdes.decoders[0].input,
+            amc_rtm_link_serdes.decoders[0].d,
+            amc_rtm_link_serdes.decoders[0].k,
+            amc_rtm_link_serdes.decoders[1].input,
+            amc_rtm_link_serdes.decoders[1].d,
+            amc_rtm_link_serdes.decoders[1].k,
 
-            master_serdes.rx_pattern,
-            master_serdes.rx_bitslip_value,
-            master_serdes.rx_delay_rst,
-            master_serdes.rx_delay_inc,
-            master_serdes.rx_delay_ce,
-            master_serdes_init.debug,
-            master_serdes_init.ready,
-            master_serdes_init.delay,
-            master_serdes_init.bitslip
+            amc_rtm_link_serdes.rx_pattern,
+            amc_rtm_link_serdes.rx_bitslip_value,
+            amc_rtm_link_serdes.rx_delay_rst,
+            amc_rtm_link_serdes.rx_delay_inc,
+            amc_rtm_link_serdes.rx_delay_ce,
+            amc_rtm_link_init.debug,
+            amc_rtm_link_init.ready,
+            amc_rtm_link_init.delay,
+            amc_rtm_link_init.bitslip,
+            amc_rtm_link_init.delay_min,
+            amc_rtm_link_init.delay_min_found,
+            amc_rtm_link_init.delay_max,
+            amc_rtm_link_init.delay_max_found,
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
 

@@ -14,7 +14,7 @@ from litex.soc.integration.builder import *
 from litex.soc.cores.uart import UARTWishboneBridge
 from litex.soc.cores.spi import SPIMaster
 
-from transceiver.serdes_7series import SERDESPLL, SERDES, SERDESInitSlave
+from amc_rtm_link.phy import RTMSlavePLL, RTMSlaveSerdes, RTMSlaveInit
 
 from litescope import LiteScopeAnalyzer
 
@@ -141,11 +141,11 @@ class JESDTestSoC(SoCCore):
 
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "slave_serdes_init": 20,
+        "amc_rtm_link_init": 20,
         "analyzer":          30
     }
     csr_map.update(SoCCore.csr_map)
-    def __init__(self, platform, dac=0):
+    def __init__(self, platform):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -162,60 +162,65 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
         self.crg.cd_sys.clk.attr.add("keep")
-        platform.add_period_constraint(self.crg.cd_sys.clk, 10.0)
+        platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
-        # slave
-        slave_pll = SERDESPLL(125e6, 1.25e9)
-        self.submodules += slave_pll
+        # amc rtm link
+        amc_rtm_link_pll = RTMSlavePLL()
+        self.submodules += amc_rtm_link_pll
 
-        slave_pads = platform.request("amc_rtm_link")
-        self.submodules.slave_serdes = slave_serdes = SERDES(
-            slave_pll, slave_pads, mode="slave")
-        self.submodules.slave_serdes_init = slave_serdes_init = SERDESInitSlave(slave_serdes)
+        amc_rtm_link_pads = platform.request("amc_rtm_link")
+        amc_rtm_link_serdes = RTMSlaveSerdes(amc_rtm_link_pll, amc_rtm_link_pads)
+        self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
+        amc_rtm_link_init = RTMSlaveInit(amc_rtm_link_serdes)
+        self.submodules.amc_rtm_link_init = amc_rtm_link_init
 
-        slave_serdes.cd_serdes.clk.attr.add("keep")
-        slave_serdes.cd_serdes_10x.clk.attr.add("keep")
-        slave_serdes.cd_serdes_2p5x.clk.attr.add("keep")
-        platform.add_period_constraint(slave_serdes.cd_serdes.clk, 16.0),
-        platform.add_period_constraint(slave_serdes.cd_serdes_10x.clk, 1.6),
-        platform.add_period_constraint(slave_serdes.cd_serdes_2p5x.clk, 6.4)
+        amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
+        amc_rtm_link_serdes.cd_serdes_10x.clk.attr.add("keep")
+        amc_rtm_link_serdes.cd_serdes_2p5x.clk.attr.add("keep")
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes.clk, 16.0),
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_10x.clk, 1.6),
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_2p5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            slave_serdes.cd_serdes.clk,
-            slave_serdes.cd_serdes_10x.clk,
-            slave_serdes.cd_serdes_2p5x.clk)
+            amc_rtm_link_serdes.cd_serdes.clk,
+            amc_rtm_link_serdes.cd_serdes_10x.clk,
+            amc_rtm_link_serdes.cd_serdes_2p5x.clk)
 
         counter = Signal(32)
         self.sync.serdes += counter.eq(counter + 1)
         self.comb += [
-            slave_serdes.encoder.d[0].eq(counter),
-            slave_serdes.encoder.d[1].eq(counter)
+            amc_rtm_link_serdes.encoder.d[0].eq(counter),
+            amc_rtm_link_serdes.encoder.d[1].eq(counter)
         ]
 
         analyzer_signals = [
-            slave_serdes.encoder.k[0],
-            slave_serdes.encoder.d[0],
-            slave_serdes.encoder.output[0],
-            slave_serdes.encoder.k[1],
-            slave_serdes.encoder.d[1],
-            slave_serdes.encoder.output[1],
+            amc_rtm_link_serdes.encoder.k[0],
+            amc_rtm_link_serdes.encoder.d[0],
+            amc_rtm_link_serdes.encoder.output[0],
+            amc_rtm_link_serdes.encoder.k[1],
+            amc_rtm_link_serdes.encoder.d[1],
+            amc_rtm_link_serdes.encoder.output[1],
 
-            slave_serdes.decoders[0].input,
-            slave_serdes.decoders[0].d,
-            slave_serdes.decoders[0].k,
-            slave_serdes.decoders[1].input,
-            slave_serdes.decoders[1].d,
-            slave_serdes.decoders[1].k,
+            amc_rtm_link_serdes.decoders[0].input,
+            amc_rtm_link_serdes.decoders[0].d,
+            amc_rtm_link_serdes.decoders[0].k,
+            amc_rtm_link_serdes.decoders[1].input,
+            amc_rtm_link_serdes.decoders[1].d,
+            amc_rtm_link_serdes.decoders[1].k,
 
-            slave_serdes.rx_pattern,
-            slave_serdes.rx_bitslip_value,
-            slave_serdes.rx_delay_rst,
-            slave_serdes.rx_delay_inc,
-            slave_serdes.rx_delay_ce,
-            slave_serdes_init.debug,
-            slave_serdes_init.ready,
-            slave_serdes_init.delay,
-            slave_serdes_init.bitslip
+            amc_rtm_link_serdes.rx_pattern,
+            amc_rtm_link_serdes.rx_bitslip_value,
+            amc_rtm_link_serdes.rx_delay_rst,
+            amc_rtm_link_serdes.rx_delay_inc,
+            amc_rtm_link_serdes.rx_delay_ce,
+            amc_rtm_link_init.debug,
+            amc_rtm_link_init.ready,
+            amc_rtm_link_init.delay,
+            amc_rtm_link_init.bitslip,
+            amc_rtm_link_init.delay_min,
+            amc_rtm_link_init.delay_min_found,
+            amc_rtm_link_init.delay_max,
+            amc_rtm_link_init.delay_max_found,
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
 
@@ -226,6 +231,7 @@ class AMCRTMLinkTestSoC(SoCCore):
 
 def main():
     platform = Platform()
+    compile_gateware = True
     if len(sys.argv) < 2:
         print("missing target (jesd or amc_rtm_link)")
         exit()
@@ -233,7 +239,8 @@ def main():
         soc = JESDTestSoC(platform)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
-    builder = Builder(soc, output_dir="build_sayma_rtm", csr_csv="test/sayma_rtm/csr.csv")
+    builder = Builder(soc, output_dir="build_sayma_rtm", csr_csv="test/sayma_rtm/csr.csv",
+        compile_gateware=compile_gateware)
     vns = builder.build()
     soc.do_exit(vns)
 

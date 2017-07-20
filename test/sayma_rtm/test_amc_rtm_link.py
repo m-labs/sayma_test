@@ -14,7 +14,6 @@ wb.open()
 
 def analyzer():
     analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
-    #analyzer.configure_trigger(cond={"rx_pattern0" : 0})
     analyzer.configure_trigger(cond={})
     analyzer.run(offset=32, length=64)
     analyzer.wait_done()

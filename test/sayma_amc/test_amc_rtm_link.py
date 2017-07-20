@@ -25,8 +25,8 @@ if len(sys.argv) < 2:
     wb.close()
     exit()
 if sys.argv[1] == "analyzer":
-    wb.regs.master_serdes_init_reset.write(1)
-    wb.regs.master_serdes_init_reset.write(0)
+    wb.regs.amc_rtm_link_init_reset.write(1)
+    wb.regs.amc_rtm_link_init_reset.write(0)
     time.sleep(2)
     analyzer()
 else:
