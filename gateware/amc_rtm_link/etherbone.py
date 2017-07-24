@@ -19,7 +19,7 @@ from litex.gen import *
 from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
-from wishbone.packet import *
+from amc_rtm_link.packet import *
 
 
 class Packetizer(Module):
@@ -32,47 +32,74 @@ class Packetizer(Module):
 
         dw = len(self.sink.data)
 
-        header_reg = Signal(header.length*8)
+        header_reg = Signal(header.length*8, reset_less=True)
         header_words = (header.length*8)//dw
-
         load = Signal()
         shift = Signal()
-
         counter = Signal(max=max(header_words, 2))
+        counter_reset = Signal()
+        counter_ce = Signal()
         self.sync += \
-            If(load,
+            If(counter_reset,
                 counter.eq(0)
-            ).Elif(shift,
+            ).Elif(counter_ce,
                 counter.eq(counter + 1)
             )
 
         self.comb += header.encode(sink, self.header)
-        self.sync += \
-            If(load,
-                header_reg.eq(self.header)
-            ).Elif(shift,
-                header_reg.eq(Cat(header_reg[dw:], Signal(dw)))
-            )
+        if header_words == 1:
+            self.sync += [
+                If(load,
+                    header_reg.eq(self.header)
+                )
+            ]
+        else:
+            self.sync += [
+                If(load,
+                    header_reg.eq(self.header)
+                ).Elif(shift,
+                    header_reg.eq(Cat(header_reg[dw:], Signal(dw)))
+                )
+            ]
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm = FSM(reset_state="IDLE")
+        self.submodules += fsm
+
+        if header_words == 1:
+            idle_next_state = "COPY"
+        else:
+            idle_next_state = "SEND_HEADER"
+
         fsm.act("IDLE",
+            sink.ready.eq(1),
+            counter_reset.eq(1),
             If(sink.valid,
-                load.eq(1),
-                NextState("HEADER")
-            )
-        )
-        fsm.act("HEADER",
-            source.valid.eq(1),
-            source.last.eq(0),
-            source.data.eq(header_reg),
-            If(source.valid & source.ready,
-                shift.eq(1),
-                If(counter == header_words-1,
-                    NextState("DATA")
+                sink.ready.eq(0),
+                source.valid.eq(1),
+                source.last.eq(0),
+                source.data.eq(self.header[:dw]),
+                If(source.valid & source.ready,
+                    load.eq(1),
+                    NextState(idle_next_state)
                 )
             )
         )
-        fsm.act("DATA",
+        if header_words != 1:
+            fsm.act("SEND_HEADER",
+                source.valid.eq(1),
+                source.last.eq(0),
+                source.data.eq(header_reg[dw:2*dw]),
+                If(source.valid & source.ready,
+                    shift.eq(1),
+                    counter_ce.eq(1),
+                    If(counter == header_words-2,
+                        NextState("COPY")
+                    )
+                )
+            )
+        if hasattr(sink, "error"):
+            self.comb += source.error.eq(sink.error)
+        fsm.act("COPY",
             source.valid.eq(sink.valid),
             source.last.eq(sink.last),
             source.data.eq(sink.data),
@@ -95,57 +122,77 @@ class Depacketizer(Module):
 
         dw = len(sink.data)
 
+        header_reg = Signal(header.length*8, reset_less=True)
         header_words = (header.length*8)//dw
 
-        reset = Signal()
         shift = Signal()
         counter = Signal(max=max(header_words, 2))
+        counter_reset = Signal()
+        counter_ce = Signal()
         self.sync += \
-            If(reset,
+            If(counter_reset,
                 counter.eq(0)
-            ).Elif(shift,
+            ).Elif(counter_ce,
                 counter.eq(counter + 1)
             )
-        self.sync += If(shift, self.header.eq(Cat(self.header[dw:], sink.data)))
-        self.comb += header.decode(self.header, source)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        if header_words == 1:
+            self.sync += \
+                If(shift,
+                    header_reg.eq(sink.data)
+                )
+        else:
+            self.sync += \
+                If(shift,
+                    header_reg.eq(Cat(header_reg[dw:], sink.data))
+                )
+        self.comb += self.header.eq(header_reg)
+
+        fsm = FSM(reset_state="IDLE")
+        self.submodules += fsm
+
+        if header_words == 1:
+            idle_next_state = "COPY"
+        else:
+            idle_next_state = "RECEIVE_HEADER"
+
         fsm.act("IDLE",
-             If(sink.valid,
-                reset.eq(1),
-                NextState("HEADER")
-            )
-        )
-        fsm.act("HEADER",
             sink.ready.eq(1),
+            counter_reset.eq(1),
             If(sink.valid,
                 shift.eq(1),
-                If(counter == header_words-1,
-                    If(sink.last,
-                        NextState("NO_DATA")
-                    ).Else(
-                        NextState("DATA")
+                NextState(idle_next_state)
+            )
+        )
+        if header_words != 1:
+            fsm.act("RECEIVE_HEADER",
+                sink.ready.eq(1),
+                If(sink.valid,
+                    counter_ce.eq(1),
+                    shift.eq(1),
+                    If(counter == header_words-2,
+                        NextState("COPY")
                     )
                 )
             )
-        )
-        fsm.act("NO_DATA",
-            source.valid.eq(1),
-            source.last.eq(1),
-            source.data.eq(0),
-            If(source.valid & source.ready,
-                NextState("IDLE")
+        no_payload = Signal()
+        self.sync += \
+            If(fsm.before_entering("COPY"),
+                no_payload.eq(sink.last)
             )
-        )
-        fsm.act("DATA",
-            source.valid.eq(sink.valid),
-            source.last.eq(sink.last),
+
+        if hasattr(sink, "error"):
+            self.comb += source.error.eq(sink.error)
+        self.comb += [
+            source.last.eq(sink.last | no_payload),
             source.data.eq(sink.data),
-            If(source.valid & source.ready,
-                sink.ready.eq(1),
-                If(source.last,
-                    NextState("IDLE")
-                )
+            header.decode(self.header, source)
+        ]
+        fsm.act("COPY",
+            sink.ready.eq(source.ready),
+            source.valid.eq(sink.valid | no_payload),
+            If(source.valid & source.ready & source.last,
+                NextState("IDLE")
             )
         )
 
