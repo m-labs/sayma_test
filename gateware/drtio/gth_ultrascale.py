@@ -4,10 +4,10 @@ from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 from litex.soc.interconnect.csr import *
 from litex.soc.cores.code_8b10b import Encoder, Decoder
 
-from transceiver.gth_ultrascale_init import GTHInit
-from transceiver.clock_aligner import BruteforceClockAligner
+from drtio.gth_ultrascale_init import GTHInit
+from drtio.clock_aligner import BruteforceClockAligner
 
-from transceiver.prbs import *
+from drtio.prbs import *
 
 
 class GTHChannelPLL(Module):

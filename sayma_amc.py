@@ -25,7 +25,7 @@ from litejesd204b.phy import LiteJESD204BPhyTX
 from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
 
-from transceiver.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
+from drtio.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
 
 from amc_rtm_link.phy import AMCMasterPLL, AMCMasterSerdes, AMCMasterInit
 
