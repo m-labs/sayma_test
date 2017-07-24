@@ -2,7 +2,7 @@
 Etherbone
 
 CERN's Etherbone protocol is initially used to run a Wishbone bus over an
-ethernet network. This re-implementation is meant to be run over transceivers
+ethernet network. This re-implementation is meant to be run over serdes
 and introduces some limitations:
 - no probing (pf/pr)
 - no address spaces (rca/bca/wca/wff)
