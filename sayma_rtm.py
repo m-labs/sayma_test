@@ -13,8 +13,11 @@ from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 from litex.soc.cores.uart import UARTWishboneBridge
 from litex.soc.cores.spi import SPIMaster
+from litex.soc.interconnect import stream
 
 from amc_rtm_link.phy import RTMSlavePLL, RTMSlaveSerdes, RTMSlaveInit
+from amc_rtm_link import packet
+from amc_rtm_link import etherbone
 
 from litescope import LiteScopeAnalyzer
 
@@ -186,13 +189,38 @@ class AMCRTMLinkTestSoC(SoCCore):
             amc_rtm_link_serdes.cd_serdes_10x.clk,
             amc_rtm_link_serdes.cd_serdes_2p5x.clk)
 
-        counter = Signal(32)
-        self.sync.serdes += counter.eq(counter + 1)
-        self.comb += [
-            amc_rtm_link_serdes.encoder.d[0].eq(counter),
-            amc_rtm_link_serdes.encoder.d[1].eq(counter)
-        ]
 
+        # wishbone master
+        amc_rtm_link_core = packet.Core(clk_freq)
+        amc_rtm_link_port = amc_rtm_link_core.crossbar.get_port(0x01)
+        amc_rtm_link_etherbone = etherbone.Etherbone(mode="master")
+        self.submodules += amc_rtm_link_core, amc_rtm_link_etherbone
+        amc_rtm_link_m2s_converter = stream.Converter(32, 16)
+        amc_rtm_link_m2s_cdc = stream.AsyncFIFO([("data", 16)], 4)
+        amc_rtm_link_m2s_cdc = ClockDomainsRenamer({"write": "sys", "read": "serdes"})(amc_rtm_link_m2s_cdc)
+        self.submodules += amc_rtm_link_m2s_converter, amc_rtm_link_m2s_cdc
+        amc_rtm_link_s2m_converter = stream.Converter(16, 32)
+        amc_rtm_link_s2m_cdc = stream.AsyncFIFO([("data", 16)], 4)
+        amc_rtm_link_s2m_cdc = ClockDomainsRenamer({"write": "serdes", "read": "sys"})(amc_rtm_link_s2m_cdc)
+        self.submodules += amc_rtm_link_s2m_converter, amc_rtm_link_s2m_cdc
+        self.comb += [
+            # tx
+            amc_rtm_link_core.source.connect(amc_rtm_link_m2s_converter.sink),
+            amc_rtm_link_m2s_converter.source.connect(amc_rtm_link_m2s_cdc.sink),
+            amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_m2s_cdc.source.data[:8]),
+            amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_m2s_cdc.source.data[8:]),
+            amc_rtm_link_m2s_cdc.source.ready.eq(amc_rtm_link_init.ready),
+
+            # rx
+            amc_rtm_link_s2m_cdc.sink.valid.eq(amc_rtm_link_init.ready),
+            amc_rtm_link_s2m_cdc.sink.data[:8].eq(amc_rtm_link_serdes.decoders[0].d),
+            amc_rtm_link_s2m_cdc.sink.data[8:].eq(amc_rtm_link_serdes.decoders[1].d),
+            amc_rtm_link_s2m_cdc.source.connect(amc_rtm_link_s2m_converter.sink),
+            amc_rtm_link_s2m_converter.source.connect(amc_rtm_link_core.sink)
+        ]
+        self.add_wb_master(amc_rtm_link_etherbone.wishbone.bus)
+
+        # analyzer
         analyzer_signals = [
             amc_rtm_link_serdes.encoder.k[0],
             amc_rtm_link_serdes.encoder.d[0],
@@ -207,6 +235,8 @@ class AMCRTMLinkTestSoC(SoCCore):
             amc_rtm_link_serdes.decoders[1].input,
             amc_rtm_link_serdes.decoders[1].d,
             amc_rtm_link_serdes.decoders[1].k,
+
+            amc_rtm_link_etherbone.wishbone.bus,
 
             amc_rtm_link_serdes.rx_pattern,
             amc_rtm_link_serdes.rx_bitslip_value,
