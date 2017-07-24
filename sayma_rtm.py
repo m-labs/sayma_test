@@ -14,6 +14,7 @@ from litex.soc.integration.builder import *
 from litex.soc.cores.uart import UARTWishboneBridge
 from litex.soc.cores.spi import SPIMaster
 from litex.soc.interconnect import stream
+from litex.soc.interconnect import wishbone
 
 from amc_rtm_link.phy import RTMSlavePLL, RTMSlaveSerdes, RTMSlaveInit
 from amc_rtm_link import packet
@@ -148,6 +149,12 @@ class AMCRTMLinkTestSoC(SoCCore):
         "analyzer":          30
     }
     csr_map.update(SoCCore.csr_map)
+
+    mem_map = {
+        "amc_rtm_link_sram": 0x20000000,  # (default shadow @0xa0000000)
+    }
+    mem_map.update(SoCCore.mem_map)
+
     def __init__(self, platform):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
@@ -178,16 +185,16 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules.amc_rtm_link_init = amc_rtm_link_init
 
         amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
-        amc_rtm_link_serdes.cd_serdes_10x.clk.attr.add("keep")
-        amc_rtm_link_serdes.cd_serdes_2p5x.clk.attr.add("keep")
-        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes.clk, 16.0),
-        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_10x.clk, 1.6),
-        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_2p5x.clk, 6.4)
+        amc_rtm_link_serdes.cd_serdes_20x.clk.attr.add("keep")
+        amc_rtm_link_serdes.cd_serdes_5x.clk.attr.add("keep")
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes.clk, 32.0),
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_20x.clk, 1.6),
+        platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
             amc_rtm_link_serdes.cd_serdes.clk,
-            amc_rtm_link_serdes.cd_serdes_10x.clk,
-            amc_rtm_link_serdes.cd_serdes_2p5x.clk)
+            amc_rtm_link_serdes.cd_serdes_20x.clk,
+            amc_rtm_link_serdes.cd_serdes_5x.clk)
 
 
         # wishbone master
@@ -195,36 +202,46 @@ class AMCRTMLinkTestSoC(SoCCore):
         amc_rtm_link_port = amc_rtm_link_core.crossbar.get_port(0x01)
         amc_rtm_link_etherbone = etherbone.Etherbone(mode="master")
         self.submodules += amc_rtm_link_core, amc_rtm_link_etherbone
-        amc_rtm_link_m2s_converter = stream.Converter(32, 16)
-        amc_rtm_link_m2s_cdc = stream.AsyncFIFO([("data", 16)], 4)
+        amc_rtm_link_m2s_cdc = stream.AsyncFIFO([("data", 32)], 4)
         amc_rtm_link_m2s_cdc = ClockDomainsRenamer({"write": "sys", "read": "serdes"})(amc_rtm_link_m2s_cdc)
-        self.submodules += amc_rtm_link_m2s_converter, amc_rtm_link_m2s_cdc
-        amc_rtm_link_s2m_converter = stream.Converter(16, 32)
-        amc_rtm_link_s2m_cdc = stream.AsyncFIFO([("data", 16)], 4)
+        self.submodules += amc_rtm_link_m2s_cdc
+        amc_rtm_link_s2m_cdc = stream.AsyncFIFO([("data", 32)], 4)
         amc_rtm_link_s2m_cdc = ClockDomainsRenamer({"write": "serdes", "read": "sys"})(amc_rtm_link_s2m_cdc)
-        self.submodules += amc_rtm_link_s2m_converter, amc_rtm_link_s2m_cdc
+        self.submodules += amc_rtm_link_s2m_cdc
         self.comb += [
             # core <--> etherbone
             amc_rtm_link_port.source.connect(amc_rtm_link_etherbone.sink),
             amc_rtm_link_etherbone.source.connect(amc_rtm_link_port.sink),
             
             # core --> serdes
-            amc_rtm_link_core.source.connect(amc_rtm_link_m2s_converter.sink),
-            amc_rtm_link_m2s_converter.source.connect(amc_rtm_link_m2s_cdc.sink),
-            amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_m2s_cdc.source.data[:8]),
-            amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_m2s_cdc.source.data[8:]),
+            amc_rtm_link_core.source.connect(amc_rtm_link_m2s_cdc.sink),
+            If(amc_rtm_link_m2s_cdc.source.valid & amc_rtm_link_init.ready,
+                amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_m2s_cdc.source.data[0:8]),
+                amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_m2s_cdc.source.data[8:16]),
+                amc_rtm_link_serdes.encoder.d[2].eq(amc_rtm_link_m2s_cdc.source.data[16:24]),
+                amc_rtm_link_serdes.encoder.d[3].eq(amc_rtm_link_m2s_cdc.source.data[24:32]),
+            ),
             amc_rtm_link_m2s_cdc.source.ready.eq(amc_rtm_link_init.ready),
 
             # serdes --> core
             amc_rtm_link_s2m_cdc.sink.valid.eq(amc_rtm_link_init.ready),
-            amc_rtm_link_s2m_cdc.sink.data[:8].eq(amc_rtm_link_serdes.decoders[0].d),
-            amc_rtm_link_s2m_cdc.sink.data[8:].eq(amc_rtm_link_serdes.decoders[1].d),
-            amc_rtm_link_s2m_cdc.source.connect(amc_rtm_link_s2m_converter.sink),
-            amc_rtm_link_s2m_converter.source.connect(amc_rtm_link_core.sink)
+            amc_rtm_link_s2m_cdc.sink.data[0:8].eq(amc_rtm_link_serdes.decoders[0].d),
+            amc_rtm_link_s2m_cdc.sink.data[8:16].eq(amc_rtm_link_serdes.decoders[1].d),
+            amc_rtm_link_s2m_cdc.sink.data[16:24].eq(amc_rtm_link_serdes.decoders[2].d),
+            amc_rtm_link_s2m_cdc.sink.data[24:32].eq(amc_rtm_link_serdes.decoders[3].d),
+            amc_rtm_link_s2m_cdc.source.connect(amc_rtm_link_core.sink),
         ]
         self.add_wb_master(amc_rtm_link_etherbone.wishbone.bus)
 
+        # wishbone test memory
+        self.submodules.amc_rtm_link_sram = wishbone.SRAM(8192)
+        self.register_mem("amc_rtm_link_sram", self.mem_map["amc_rtm_link_sram"], self.amc_rtm_link_sram.bus, 8192)
+
+
         # analyzer
+        wishbone_access = Signal()
+        self.comb += wishbone_access.eq((amc_rtm_link_serdes.decoders[0].d == 0xa5) |
+                                        (amc_rtm_link_serdes.decoders[1].d == 0x5a))
         init_group = [
             amc_rtm_link_init.debug,
             amc_rtm_link_init.ready,
@@ -236,23 +253,35 @@ class AMCRTMLinkTestSoC(SoCCore):
             amc_rtm_link_init.delay_max_found
         ]
         serdes_group = [
+            wishbone_access,
             amc_rtm_link_serdes.encoder.k[0],
             amc_rtm_link_serdes.encoder.d[0],
             amc_rtm_link_serdes.encoder.k[1],
             amc_rtm_link_serdes.encoder.d[1],
+            amc_rtm_link_serdes.encoder.k[2],
+            amc_rtm_link_serdes.encoder.d[2],
+            amc_rtm_link_serdes.encoder.k[3],
+            amc_rtm_link_serdes.encoder.d[3],
 
             amc_rtm_link_serdes.decoders[0].d,
             amc_rtm_link_serdes.decoders[0].k,
             amc_rtm_link_serdes.decoders[1].d,
-            amc_rtm_link_serdes.decoders[1].k
+            amc_rtm_link_serdes.decoders[1].k,
+            amc_rtm_link_serdes.decoders[2].d,
+            amc_rtm_link_serdes.decoders[2].k,
+            amc_rtm_link_serdes.decoders[3].d,
+            amc_rtm_link_serdes.decoders[3].k,
         ]
         etherbone_source_group = [
+            wishbone_access,
             amc_rtm_link_etherbone.wishbone.source
         ]
         etherbone_sink_group = [
+            wishbone_access,
             amc_rtm_link_etherbone.wishbone.sink
         ]
         wishbone_group = [
+            wishbone_access,
             amc_rtm_link_etherbone.wishbone.bus
         ]
         analyzer_signals = {
@@ -262,7 +291,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             3 : etherbone_sink_group,
             4 : wishbone_group
         }
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 512, cd="serdes")
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 128, cd="sys")
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):

@@ -47,7 +47,7 @@ class PhaseDetector(Module, AutoCSR):
 
         # find transition
         mdata_d = Signal(8)
-        self.sync.serdes_2p5x += mdata_d.eq(self.mdata)
+        self.sync.serdes_5x += mdata_d.eq(self.mdata)
         self.comb += transition.eq(mdata_d != self.mdata)
 
 
@@ -66,7 +66,7 @@ class PhaseDetector(Module, AutoCSR):
             too_late.eq(lateness == (2**nbits - 1)),
             too_early.eq(lateness == 0)
         ]
-        self.sync.serdes_2p5x += [
+        self.sync.serdes_5x += [
             If(reset_lateness,
                 lateness.eq(2**(nbits - 1))
             ).Elif(~too_late & ~too_early,
@@ -77,7 +77,7 @@ class PhaseDetector(Module, AutoCSR):
 
         # control / status cdc
         self.specials += MultiReg(Cat(too_late, too_early), self.status.status)
-        self.submodules.do_reset_lateness = PulseSynchronizer("sys", "serdes_2p5x")
+        self.submodules.do_reset_lateness = PulseSynchronizer("sys", "serdes_5x")
         self.comb += [
             reset_lateness.eq(self.do_reset_lateness.o),
             self.do_reset_lateness.i.eq(self.reset.re)
@@ -91,21 +91,21 @@ class SerdesPLL(Module):
         self.lock = Signal()
         self.refclk = Signal()
         self.serdes_clk = Signal()
-        self.serdes_10x_clk = Signal()
-        self.serdes_2p5x_clk = Signal()
+        self.serdes_20x_clk = Signal()
+        self.serdes_5x_clk = Signal()
 
         # refclk: 125MHz
         # pll vco: 1250MHz
-        # serdes: 62.5MHz
-        # serdes_10x = 625MHz
-        # serdes_2p5x = 156.25MHz
+        # serdes: 31.25MHz
+        # serdes_20x = 625MHz
+        # serdes_5x = 156.25MHz
         self.linerate = linerate
 
         pll_locked = Signal()
         pll_fb = Signal()
         pll_serdes_clk = Signal()
-        pll_serdes_10x_clk = Signal()
-        pll_serdes_2p5x_clk = Signal()
+        pll_serdes_20x_clk = Signal()
+        pll_serdes_5x_clk = Signal()
         self.specials += [
             Instance("PLLE2_BASE",
                 p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
@@ -116,33 +116,33 @@ class SerdesPLL(Module):
                 i_CLKIN1=self.refclk, i_CLKFBIN=pll_fb,
                 o_CLKFBOUT=pll_fb,
 
-                # 62.5MHz: serdes
-                p_CLKOUT0_DIVIDE=20//vco_div, p_CLKOUT0_PHASE=0.0,
+                # 31.25MHz: serdes
+                p_CLKOUT0_DIVIDE=40//vco_div, p_CLKOUT0_PHASE=0.0,
                 o_CLKOUT0=pll_serdes_clk,
 
-                # 625MHz: serdes_10x
+                # 625MHz: serdes_20x
                 p_CLKOUT1_DIVIDE=2//vco_div, p_CLKOUT1_PHASE=0.0,
-                o_CLKOUT1=pll_serdes_10x_clk,
+                o_CLKOUT1=pll_serdes_20x_clk,
 
-                # 156.25MHz: serdes_2p5x
+                # 156.25MHz: serdes_5x
                 p_CLKOUT2_DIVIDE=8//vco_div, p_CLKOUT2_PHASE=0.0,
-                o_CLKOUT2=pll_serdes_2p5x_clk
+                o_CLKOUT2=pll_serdes_5x_clk
             ),
             Instance("BUFG", i_I=pll_serdes_clk, o_O=self.serdes_clk),
-            Instance("BUFG", i_I=pll_serdes_10x_clk, o_O=self.serdes_10x_clk),
-            Instance("BUFG", i_I=pll_serdes_2p5x_clk, o_O=self.serdes_2p5x_clk)
+            Instance("BUFG", i_I=pll_serdes_20x_clk, o_O=self.serdes_20x_clk),
+            Instance("BUFG", i_I=pll_serdes_5x_clk, o_O=self.serdes_5x_clk)
         ]
         self.comb += self.lock.eq(pll_locked)
 
 
 class Series7Serdes(Module):
     def __init__(self, pll, pads, mode="master"):
-        self.tx_pattern = Signal(20)
+        self.tx_pattern = Signal(40)
         self.tx_pattern_en = Signal()
 
-        self.rx_pattern = Signal(20)
+        self.rx_pattern = Signal(40)
 
-        self.rx_bitslip_value = Signal(5)
+        self.rx_bitslip_value = Signal(6)
         self.rx_delay_rst = Signal()
         self.rx_delay_inc = Signal()
         self.rx_delay_ce = Signal()
@@ -150,9 +150,9 @@ class Series7Serdes(Module):
         # # #
 
         self.submodules.encoder = ClockDomainsRenamer("serdes")(
-            Encoder(2, True))
+            Encoder(4, True))
         self.decoders = [ClockDomainsRenamer("serdes")(
-            Decoder(True)) for _ in range(2)]
+            Decoder(True)) for _ in range(4)]
         self.submodules += self.decoders
 
         # clocking
@@ -162,23 +162,23 @@ class Series7Serdes(Module):
         # slave mode:
         # - linerate/10 pll refclk provided by clk_pads
         self.clock_domains.cd_serdes = ClockDomain()
-        self.clock_domains.cd_serdes_2p5x = ClockDomain()
-        self.clock_domains.cd_serdes_10x = ClockDomain(reset_less=True)
+        self.clock_domains.cd_serdes_5x = ClockDomain()
+        self.clock_domains.cd_serdes_20x = ClockDomain(reset_less=True)
         self.comb += [
             self.cd_serdes.clk.eq(pll.serdes_clk),
-            self.cd_serdes_2p5x.clk.eq(pll.serdes_2p5x_clk),
-            self.cd_serdes_10x.clk.eq(pll.serdes_10x_clk)
+            self.cd_serdes_5x.clk.eq(pll.serdes_5x_clk),
+            self.cd_serdes_20x.clk.eq(pll.serdes_20x_clk)
         ]
         self.specials += AsyncResetSynchronizer(self.cd_serdes, ~pll.lock)
-        self.comb += self.cd_serdes_2p5x.rst.eq(self.cd_serdes.rst)
+        self.comb += self.cd_serdes_5x.rst.eq(self.cd_serdes.rst)
 
         # control/status cdc
-        tx_pattern = Signal(20)
+        tx_pattern = Signal(40)
         tx_pattern_en = Signal()
 
-        rx_pattern = Signal(20)
+        rx_pattern = Signal(40)
 
-        rx_bitslip_value = Signal(5)
+        rx_bitslip_value = Signal(6)
 
         self.specials += [
             MultiReg(self.tx_pattern, tx_pattern, "serdes"),
@@ -193,8 +193,8 @@ class Series7Serdes(Module):
 
         # tx clock (linerate/10)
         if mode == "master":
-            self.submodules.tx_clk_gearbox = Gearbox(20, "serdes", 8, "serdes_2p5x")
-            self.comb += self.tx_clk_gearbox.i.eq(0b11111000001111100000)
+            self.submodules.tx_clk_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
+            self.comb += self.tx_clk_gearbox.i.eq(0b1111100000111110000011111000001111100000)
 
             clk_o = Signal()
             self.specials += [
@@ -206,7 +206,7 @@ class Series7Serdes(Module):
                     o_OQ=clk_o,
                     i_OCE=1,
                     i_RST=ResetSignal("serdes"),
-                    i_CLK=ClockSignal("serdes_10x"), i_CLKDIV=ClockSignal("serdes_2p5x"),
+                    i_CLK=ClockSignal("serdes_20x"), i_CLKDIV=ClockSignal("serdes_5x"),
                     i_D1=self.tx_clk_gearbox.o[0], i_D2=self.tx_clk_gearbox.o[1],
                     i_D3=self.tx_clk_gearbox.o[2], i_D4=self.tx_clk_gearbox.o[3],
                     i_D5=self.tx_clk_gearbox.o[4], i_D6=self.tx_clk_gearbox.o[5],
@@ -220,12 +220,12 @@ class Series7Serdes(Module):
             ]
 
         # tx data
-        self.submodules.tx_gearbox = Gearbox(20, "serdes", 8, "serdes_2p5x")
+        self.submodules.tx_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
         self.sync.serdes += [
             If(tx_pattern_en,
                 self.tx_gearbox.i.eq(tx_pattern)
             ).Else(
-                self.tx_gearbox.i.eq(Cat(*[self.encoder.output[i] for i in range(2)]))
+                self.tx_gearbox.i.eq(Cat(*[self.encoder.output[i] for i in range(4)]))
             )
         ]
 
@@ -239,7 +239,7 @@ class Series7Serdes(Module):
                 o_OQ=serdes_o,
                 i_OCE=1,
                 i_RST=ResetSignal("serdes"),
-                i_CLK=ClockSignal("serdes_10x"), i_CLKDIV=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_20x"), i_CLKDIV=ClockSignal("serdes_5x"),
                 i_D1=self.tx_gearbox.o[0], i_D2=self.tx_gearbox.o[1],
                 i_D3=self.tx_gearbox.o[2], i_D4=self.tx_gearbox.o[3],
                 i_D5=self.tx_gearbox.o[4], i_D6=self.tx_gearbox.o[5],
@@ -276,11 +276,10 @@ class Series7Serdes(Module):
             self.comb += pll.refclk.eq(clk_i_bufg)
 
         # rx
-        self.submodules.rx_gearbox = Gearbox(8, "serdes_2p5x", 20, "serdes")
-        self.submodules.rx_bitslip = ClockDomainsRenamer("serdes")(BitSlip(20))
+        self.submodules.rx_gearbox = Gearbox(8, "serdes_5x", 40, "serdes")
+        self.submodules.rx_bitslip = ClockDomainsRenamer("serdes")(BitSlip(40))
 
-        self.submodules.phase_detector = ClockDomainsRenamer("serdes_2p5x")(
-            PhaseDetector())
+        self.submodules.phase_detector = ClockDomainsRenamer("serdes_5x")(PhaseDetector())
 
         # use 2 serdes for phase detection: 1 master / 1 slave
         serdes_m_i_nodelay = Signal()
@@ -318,8 +317,8 @@ class Series7Serdes(Module):
                 i_DDLY=serdes_m_i_delayed,
                 i_CE1=1,
                 i_RST=ResetSignal("serdes"),
-                i_CLK=ClockSignal("serdes_10x"), i_CLKB=~ClockSignal("serdes_10x"),
-                i_CLKDIV=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_20x"), i_CLKB=~ClockSignal("serdes_20x"),
+                i_CLKDIV=ClockSignal("serdes_5x"),
                 i_BITSLIP=0,
                 o_Q8=serdes_m_q[0], o_Q7=serdes_m_q[1],
                 o_Q6=serdes_m_q[2], o_Q5=serdes_m_q[3],
@@ -355,8 +354,8 @@ class Series7Serdes(Module):
                 i_DDLY=serdes_s_i_delayed,
                 i_CE1=1,
                 i_RST=ResetSignal("serdes"),
-                i_CLK=ClockSignal("serdes_10x"), i_CLKB=~ClockSignal("serdes_10x"),
-                i_CLKDIV=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_20x"), i_CLKB=~ClockSignal("serdes_20x"),
+                i_CLKDIV=ClockSignal("serdes_5x"),
                 i_BITSLIP=0,
                 o_Q8=serdes_s_q[0], o_Q7=serdes_s_q[1],
                 o_Q6=serdes_s_q[2], o_Q5=serdes_s_q[3],
@@ -371,20 +370,22 @@ class Series7Serdes(Module):
             self.rx_gearbox.i.eq(serdes_m_q),
             self.rx_bitslip.value.eq(rx_bitslip_value),
             self.rx_bitslip.i.eq(self.rx_gearbox.o),
-            self.decoders[0].input.eq(self.rx_bitslip.o[:10]),
-            self.decoders[1].input.eq(self.rx_bitslip.o[10:]),
+            self.decoders[0].input.eq(self.rx_bitslip.o[0:10]),
+            self.decoders[1].input.eq(self.rx_bitslip.o[10:20]),
+            self.decoders[2].input.eq(self.rx_bitslip.o[20:30]),
+            self.decoders[3].input.eq(self.rx_bitslip.o[30:40]),
             rx_pattern.eq(self.rx_bitslip.o),
         ]
 
 
 class UltrascaleSerdes(Module):
     def __init__(self, pll, pads, mode="master"):
-        self.tx_pattern = Signal(20)
+        self.tx_pattern = Signal(40)
         self.tx_pattern_en = Signal()
 
-        self.rx_pattern = Signal(20)
+        self.rx_pattern = Signal(40)
 
-        self.rx_bitslip_value = Signal(5)
+        self.rx_bitslip_value = Signal(6)
         self.rx_delay_rst = Signal()
         self.rx_delay_inc = Signal()
         self.rx_delay_ce = Signal()
@@ -393,9 +394,9 @@ class UltrascaleSerdes(Module):
         # # #
 
         self.submodules.encoder = ClockDomainsRenamer("serdes")(
-            Encoder(2, True))
+            Encoder(4, True))
         self.decoders = [ClockDomainsRenamer("serdes")(
-            Decoder(True)) for _ in range(2)]
+            Decoder(True)) for _ in range(4)]
         self.submodules += self.decoders
 
         # clocking
@@ -405,23 +406,23 @@ class UltrascaleSerdes(Module):
         # slave mode:
         # - linerate/10 pll refclk provided by clk_pads
         self.clock_domains.cd_serdes = ClockDomain()
-        self.clock_domains.cd_serdes_2p5x = ClockDomain()
-        self.clock_domains.cd_serdes_10x = ClockDomain(reset_less=True)
+        self.clock_domains.cd_serdes_5x = ClockDomain()
+        self.clock_domains.cd_serdes_20x = ClockDomain(reset_less=True)
         self.comb += [
             self.cd_serdes.clk.eq(pll.serdes_clk),
-            self.cd_serdes_2p5x.clk.eq(pll.serdes_2p5x_clk),
-            self.cd_serdes_10x.clk.eq(pll.serdes_10x_clk)
+            self.cd_serdes_5x.clk.eq(pll.serdes_5x_clk),
+            self.cd_serdes_20x.clk.eq(pll.serdes_20x_clk)
         ]
         self.specials += AsyncResetSynchronizer(self.cd_serdes, ~pll.lock)
-        self.comb += self.cd_serdes_2p5x.rst.eq(self.cd_serdes.rst)
+        self.comb += self.cd_serdes_5x.rst.eq(self.cd_serdes.rst)
 
         # control/status cdc
-        tx_pattern = Signal(20)
+        tx_pattern = Signal(40)
         tx_pattern_en = Signal()
 
-        rx_pattern = Signal(20)
+        rx_pattern = Signal(40)
 
-        rx_bitslip_value = Signal(5)
+        rx_bitslip_value = Signal(6)
         rx_delay_rst = Signal()
         rx_delay_inc = Signal()
         rx_delay_en_vtc = Signal()
@@ -436,15 +437,15 @@ class UltrascaleSerdes(Module):
 
         self.specials += [
             MultiReg(self.rx_bitslip_value, rx_bitslip_value, "serdes"),
-            MultiReg(self.rx_delay_inc, rx_delay_inc, "serdes_2p5x"),
-            MultiReg(self.rx_delay_en_vtc, rx_delay_en_vtc, "serdes_2p5x")
+            MultiReg(self.rx_delay_inc, rx_delay_inc, "serdes_5x"),
+            MultiReg(self.rx_delay_en_vtc, rx_delay_en_vtc, "serdes_5x")
         ]
-        self.submodules.do_rx_delay_rst = PulseSynchronizer("sys", "serdes_2p5x")
+        self.submodules.do_rx_delay_rst = PulseSynchronizer("sys", "serdes_5x")
         self.comb += [
             rx_delay_rst.eq(self.do_rx_delay_rst.o),
             self.do_rx_delay_rst.i.eq(self.rx_delay_rst)
         ]
-        self.submodules.do_rx_delay_ce = PulseSynchronizer("sys", "serdes_2p5x")
+        self.submodules.do_rx_delay_ce = PulseSynchronizer("sys", "serdes_5x")
         self.comb += [
             rx_delay_ce.eq(self.do_rx_delay_ce.o),
             self.do_rx_delay_ce.i.eq(self.rx_delay_ce)
@@ -452,8 +453,8 @@ class UltrascaleSerdes(Module):
 
         # tx clock (linerate/10)
         if mode == "master":
-            self.submodules.tx_clk_gearbox = Gearbox(20, "serdes", 8, "serdes_2p5x")
-            self.comb += self.tx_clk_gearbox.i.eq(0b11111000001111100000)
+            self.submodules.tx_clk_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
+            self.comb += self.tx_clk_gearbox.i.eq(0b1111100000111110000011111000001111100000)
 
             clk_o = Signal()
             self.specials += [
@@ -463,7 +464,7 @@ class UltrascaleSerdes(Module):
 
                     o_OQ=clk_o,
                     i_RST=ResetSignal("serdes"),
-                    i_CLK=ClockSignal("serdes_10x"), i_CLKDIV=ClockSignal("serdes_2p5x"),
+                    i_CLK=ClockSignal("serdes_20x"), i_CLKDIV=ClockSignal("serdes_5x"),
                     i_D=self.tx_clk_gearbox.o
                 ),
                 Instance("OBUFDS",
@@ -474,12 +475,12 @@ class UltrascaleSerdes(Module):
             ]
 
         # tx data
-        self.submodules.tx_gearbox = Gearbox(20, "serdes", 8, "serdes_2p5x")
+        self.submodules.tx_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
         self.sync.serdes += \
             If(tx_pattern_en,
                 self.tx_gearbox.i.eq(tx_pattern)
             ).Else(
-                self.tx_gearbox.i.eq(Cat(*[self.encoder.output[i] for i in range(2)]))
+                self.tx_gearbox.i.eq(Cat(*[self.encoder.output[i] for i in range(4)]))
             )
 
         serdes_o = Signal()
@@ -490,7 +491,7 @@ class UltrascaleSerdes(Module):
 
                 o_OQ=serdes_o,
                 i_RST=ResetSignal("serdes"),
-                i_CLK=ClockSignal("serdes_10x"), i_CLKDIV=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_20x"), i_CLKDIV=ClockSignal("serdes_5x"),
                 i_D=self.tx_gearbox.o
             ),
             Instance("OBUFDS",
@@ -524,10 +525,10 @@ class UltrascaleSerdes(Module):
             self.comb += pll.refclk.eq(clk_i_bufg)
 
         # rx data
-        self.submodules.rx_gearbox = Gearbox(8, "serdes_2p5x", 20, "serdes")
-        self.submodules.rx_bitslip = ClockDomainsRenamer("serdes")(BitSlip(20))
+        self.submodules.rx_gearbox = Gearbox(8, "serdes_5x", 40, "serdes")
+        self.submodules.rx_bitslip = ClockDomainsRenamer("serdes")(BitSlip(40))
 
-        self.submodules.phase_detector = ClockDomainsRenamer("serdes_2p5x")(PhaseDetector())
+        self.submodules.phase_detector = ClockDomainsRenamer("serdes_5x")(PhaseDetector())
 
         # use 2 serdes for phase detection: 1 master / 1 slave
         serdes_m_i_nodelay = Signal()
@@ -551,7 +552,7 @@ class UltrascaleSerdes(Module):
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
                 p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=50, # 1/4 bit period (ambient temp)
 
-                i_CLK=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_5x"),
                 i_RST=rx_delay_rst, i_LOAD=0,
                 i_INC=rx_delay_inc, i_EN_VTC=rx_delay_en_vtc,
                 i_CE=rx_delay_ce,
@@ -564,8 +565,8 @@ class UltrascaleSerdes(Module):
                 i_D=serdes_m_i_delayed,
                 i_RST=ResetSignal("serdes"),
                 i_FIFO_RD_CLK=0, i_FIFO_RD_EN=0,
-                i_CLK=ClockSignal("serdes_10x"), i_CLK_B=~ClockSignal("serdes_10x"),
-                i_CLKDIV=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_20x"), i_CLK_B=~ClockSignal("serdes_20x"),
+                i_CLKDIV=ClockSignal("serdes_5x"),
                 o_Q=serdes_m_q
             )
         ]
@@ -581,7 +582,7 @@ class UltrascaleSerdes(Module):
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
                 p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=100, # 1/2 bit period (ambient temp)
 
-                i_CLK=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_5x"),
                 i_RST=rx_delay_rst, i_LOAD=0,
                 i_INC=rx_delay_inc, i_EN_VTC=rx_delay_en_vtc,
                 i_CE=rx_delay_ce,
@@ -594,8 +595,8 @@ class UltrascaleSerdes(Module):
                 i_D=serdes_s_i_delayed,
                 i_RST=ResetSignal("serdes"),
                 i_FIFO_RD_CLK=0, i_FIFO_RD_EN=0,
-                i_CLK=ClockSignal("serdes_10x"), i_CLK_B=~ClockSignal("serdes_10x"),
-                i_CLKDIV=ClockSignal("serdes_2p5x"),
+                i_CLK=ClockSignal("serdes_20x"), i_CLK_B=~ClockSignal("serdes_20x"),
+                i_CLKDIV=ClockSignal("serdes_5x"),
                 o_Q=serdes_s_q
             )
         ]
@@ -605,8 +606,10 @@ class UltrascaleSerdes(Module):
             self.rx_gearbox.i.eq(serdes_m_q),
             self.rx_bitslip.value.eq(rx_bitslip_value),
             self.rx_bitslip.i.eq(self.rx_gearbox.o),
-            self.decoders[0].input.eq(self.rx_bitslip.o[:10]),
-            self.decoders[1].input.eq(self.rx_bitslip.o[10:]),
+            self.decoders[0].input.eq(self.rx_bitslip.o[0:10]),
+            self.decoders[1].input.eq(self.rx_bitslip.o[10:20]),
+            self.decoders[2].input.eq(self.rx_bitslip.o[20:30]),
+            self.decoders[3].input.eq(self.rx_bitslip.o[30:40]),            
             rx_pattern.eq(self.rx_bitslip.o)
         ]
 
@@ -625,7 +628,7 @@ class MasterInit(Module, AutoCSR):
         self.delay_min_found = delay_min_found = Signal()
         self.delay_max = delay_max = Signal(max=taps)
         self.delay_max_found = delay_max_found = Signal()
-        self.bitslip = bitslip = Signal(max=20)
+        self.bitslip = bitslip = Signal(max=40)
 
         timer = WaitTimer(1024)
         self.submodules += timer
@@ -704,7 +707,7 @@ class MasterInit(Module, AutoCSR):
                 If(delay_min_found,
                     NextState("ERROR")
                 ),
-                If(bitslip == (20 - 1),
+                If(bitslip == (40 - 1),
                     NextValue(bitslip, 0)
                 ).Else(    
                     NextValue(bitslip, bitslip + 1)
@@ -773,7 +776,7 @@ class SlaveInit(Module, AutoCSR):
         self.delay_min_found = delay_min_found = Signal()
         self.delay_max = delay_max = Signal(max=taps)
         self.delay_max_found = delay_max_found = Signal()
-        self.bitslip = bitslip = Signal(max=sync_pattern)
+        self.bitslip = bitslip = Signal(max=40)
 
         timer = WaitTimer(1024)
         self.submodules += timer
@@ -834,7 +837,7 @@ class SlaveInit(Module, AutoCSR):
                 If(delay_min_found,
                     NextState("ERROR")
                 ),
-                If(bitslip == (20 - 1),
+                If(bitslip == (40 - 1),
                     NextValue(bitslip, 0)
                 ).Else(    
                     NextValue(bitslip, bitslip + 1)
@@ -906,7 +909,7 @@ class AMCMasterSerdes(UltrascaleSerdes):
 
 class AMCMasterInit(MasterInit):
     def __init__(self, serdes):
-        MasterInit.__init__(self, serdes, sync_pattern=0x12345, taps=512)
+        MasterInit.__init__(self, serdes, sync_pattern=0x123456789a, taps=512)
 
 # rtm specific
 
@@ -920,4 +923,4 @@ class RTMSlaveSerdes(Series7Serdes):
 
 class RTMSlaveInit(SlaveInit):
     def __init__(self, serdes):
-        SlaveInit.__init__(self, serdes, sync_pattern=0x12345, taps=32)
+        SlaveInit.__init__(self, serdes, sync_pattern=0x123456789a, taps=32)

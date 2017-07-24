@@ -1,4 +1,3 @@
-- test amc rtm link (low level and wishbone)
 - test spi jesd configuration with amc through amc rtm link (need m-labs support to generate csr for rtm in amc header?)
 - test jesd with amc/rtm/wishbone bridge.
 - create a misoc/migen design with everything integrated.
