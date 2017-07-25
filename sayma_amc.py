@@ -570,7 +570,7 @@ class AMCRTMLinkTestSoC(SoCCore):
     }
     mem_map.update(SoCCore.mem_map)
 
-    def __init__(self, platform):
+    def __init__(self, platform, with_analyzer=False):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -616,9 +616,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            amc_rtm_link_serdes.cd_serdes.clk,
-            amc_rtm_link_serdes.cd_serdes_20x.clk,
-            amc_rtm_link_serdes.cd_serdes_5x.clk)
+            amc_rtm_link_serdes.cd_serdes.clk)
 
 
         # wishbone slave
@@ -626,10 +624,10 @@ class AMCRTMLinkTestSoC(SoCCore):
         amc_rtm_link_port = amc_rtm_link_core.crossbar.get_port(0x01)
         amc_rtm_link_etherbone = etherbone.Etherbone(mode="slave")
         self.submodules += amc_rtm_link_core, amc_rtm_link_etherbone
-        amc_rtm_link_tx_cdc = stream.AsyncFIFO([("data", 32)], 4)
+        amc_rtm_link_tx_cdc = stream.AsyncFIFO([("data", 32)], 8)
         amc_rtm_link_tx_cdc = ClockDomainsRenamer({"write": "sys", "read": "serdes"})(amc_rtm_link_tx_cdc)
         self.submodules += amc_rtm_link_tx_cdc
-        amc_rtm_link_rx_cdc = stream.AsyncFIFO([("data", 32)], 4)
+        amc_rtm_link_rx_cdc = stream.AsyncFIFO([("data", 32)], 8)
         amc_rtm_link_rx_cdc = ClockDomainsRenamer({"write": "serdes", "read": "sys"})(amc_rtm_link_rx_cdc)
         self.submodules += amc_rtm_link_rx_cdc
         self.comb += [
@@ -658,59 +656,60 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.add_wb_slave(mem_decoder(self.mem_map["amc_rtm_link"]), amc_rtm_link_etherbone.wishbone.bus)
 
         # analyzer
-        wishbone_access = Signal()
-        self.comb += wishbone_access.eq(amc_rtm_link_etherbone.wishbone.bus.stb &
-                                        amc_rtm_link_etherbone.wishbone.bus.cyc)
-        init_group = [
-            wishbone_access,
-            amc_rtm_link_init.ready,
-            amc_rtm_link_init.delay,
-            amc_rtm_link_init.bitslip,
-            amc_rtm_link_init.delay_min,
-            amc_rtm_link_init.delay_min_found,
-            amc_rtm_link_init.delay_max,
-            amc_rtm_link_init.delay_max_found
-        ]
-        serdes_group = [
-            wishbone_access,
-            amc_rtm_link_serdes.encoder.k[0],
-            amc_rtm_link_serdes.encoder.d[0],
-            amc_rtm_link_serdes.encoder.k[1],
-            amc_rtm_link_serdes.encoder.d[1],
-            amc_rtm_link_serdes.encoder.k[2],
-            amc_rtm_link_serdes.encoder.d[2],
-            amc_rtm_link_serdes.encoder.k[3],
-            amc_rtm_link_serdes.encoder.d[3],
+        if with_analyzer:
+            wishbone_access = Signal()
+            self.comb += wishbone_access.eq(amc_rtm_link_etherbone.wishbone.bus.stb &
+                                            amc_rtm_link_etherbone.wishbone.bus.cyc)
+            init_group = [
+                wishbone_access,
+                amc_rtm_link_init.ready,
+                amc_rtm_link_init.delay,
+                amc_rtm_link_init.bitslip,
+                amc_rtm_link_init.delay_min,
+                amc_rtm_link_init.delay_min_found,
+                amc_rtm_link_init.delay_max,
+                amc_rtm_link_init.delay_max_found
+            ]
+            serdes_group = [
+                wishbone_access,
+                amc_rtm_link_serdes.encoder.k[0],
+                amc_rtm_link_serdes.encoder.d[0],
+                amc_rtm_link_serdes.encoder.k[1],
+                amc_rtm_link_serdes.encoder.d[1],
+                amc_rtm_link_serdes.encoder.k[2],
+                amc_rtm_link_serdes.encoder.d[2],
+                amc_rtm_link_serdes.encoder.k[3],
+                amc_rtm_link_serdes.encoder.d[3],
 
-            amc_rtm_link_serdes.decoders[0].d,
-            amc_rtm_link_serdes.decoders[0].k,
-            amc_rtm_link_serdes.decoders[1].d,
-            amc_rtm_link_serdes.decoders[1].k,
-            amc_rtm_link_serdes.decoders[2].d,
-            amc_rtm_link_serdes.decoders[2].k,
-            amc_rtm_link_serdes.decoders[3].d,
-            amc_rtm_link_serdes.decoders[3].k,
-        ]
-        etherbone_source_group = [
-            wishbone_access,
-            amc_rtm_link_etherbone.wishbone.source
-        ]
-        etherbone_sink_group = [
-            wishbone_access,
-            amc_rtm_link_etherbone.wishbone.sink
-        ]
-        wishbone_group = [
-            wishbone_access,
-            amc_rtm_link_etherbone.wishbone.bus
-        ]
-        analyzer_signals = {
-            0 : init_group,
-            1 : serdes_group,
-            2 : etherbone_source_group,
-            3 : etherbone_sink_group,
-            4 : wishbone_group
-        }
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 128, cd="sys")
+                amc_rtm_link_serdes.decoders[0].d,
+                amc_rtm_link_serdes.decoders[0].k,
+                amc_rtm_link_serdes.decoders[1].d,
+                amc_rtm_link_serdes.decoders[1].k,
+                amc_rtm_link_serdes.decoders[2].d,
+                amc_rtm_link_serdes.decoders[2].k,
+                amc_rtm_link_serdes.decoders[3].d,
+                amc_rtm_link_serdes.decoders[3].k,
+            ]
+            etherbone_source_group = [
+                wishbone_access,
+                amc_rtm_link_etherbone.wishbone.source
+            ]
+            etherbone_sink_group = [
+                wishbone_access,
+                amc_rtm_link_etherbone.wishbone.sink
+            ]
+            wishbone_group = [
+                wishbone_access,
+                amc_rtm_link_etherbone.wishbone.bus
+            ]
+            analyzer_signals = {
+                0 : init_group,
+                1 : serdes_group,
+                2 : etherbone_source_group,
+                3 : etherbone_sink_group,
+                4 : wishbone_group
+            }
+            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 128, cd="sys")
 
     def do_exit(self, vns):
         if hasattr(self, "analyzer"):

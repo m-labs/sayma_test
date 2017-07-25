@@ -30,7 +30,7 @@ def check_pattern(length, debug=False):
         if read_data != seed_to_data(i):
             error = 1
             if debug:
-                print("{}: 0x{:08x}, 0x{:08x} KO".format(i, read_data, seed_to_data(i)))
+                print("{}: 0x{:08x}, 0x{:08x}   KO".format(i, read_data, seed_to_data(i)))
         else:
             if debug:
                 print("{}: 0x{:08x}, 0x{:08x} OK".format(i, read_data, seed_to_data(i)))
@@ -48,11 +48,13 @@ groups = {
 
 def analyzer():
     analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
-    analyzer.configure_group(groups["serdes"])
+    analyzer.configure_group(groups["wishbone"])
     analyzer.configure_trigger(cond={"wishbone_access" : 1})  
     analyzer.run(offset=32, length=128)
     
-    wb.write(0x20000000, 0x12345678)
+    write_pattern(32)
+    errors = check_pattern(32, debug=True)
+    print("errors: {:d}".format(errors))
 
     analyzer.wait_done()
     analyzer.upload()
@@ -76,9 +78,10 @@ if sys.argv[1] == "init":
     print("bitslip: {:d}".format(wb.regs.amc_rtm_link_control_bitslip.read()))
     print("ready: {:d}".format(wb.regs.amc_rtm_link_control_ready.read()))
 elif sys.argv[1] == "wishbone":
-    write_pattern(32)
-    errors = check_pattern(32, debug=True)
+    write_pattern(1024)
+    errors = check_pattern(1024, debug=False)
     print("errors: {:d}".format(errors))
+
 elif sys.argv[1] == "analyzer":
     analyzer()
 else:
