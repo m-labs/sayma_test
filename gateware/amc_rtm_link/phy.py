@@ -895,22 +895,3 @@ class Control(Module, AutoCSR):
             self.delay_max.status.eq(init.delay_max),
             self.bitslip.status.eq(init.bitslip)
         ]
-
-
-# rtm specific
-
-class RTMSlavePLL(SerdesPLL):
-    def __init__(self):
-        SerdesPLL.__init__(self, 125e6, 1.25e9, vco_div=1)
-
-class RTMSlaveSerdes(Series7Serdes):
-    def __init__(self, pll, pads):
-        Series7Serdes.__init__(self, pll, pads, mode="slave")
-
-class RTMSlaveInit(SlaveInit):
-    def __init__(self, serdes):
-        SlaveInit.__init__(self, serdes, sync_pattern=0x123456789a, taps=32)
-
-class RTMSlaveControl(Control):
-    def __init__(self, init):
-        Control.__init__(self, init, mode="slave")
