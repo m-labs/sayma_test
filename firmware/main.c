@@ -73,6 +73,7 @@ static void help(void)
 	puts("help              - this command");
 	puts("reboot            - reboot CPU");
 	puts("amc_rtm_link_init - (re)initialize AMC/RTM link");
+	puts("amc_rtm_link_test - test AMC/RTM link");
 }
 
 static void reboot(void)
@@ -96,6 +97,43 @@ static void amc_rtm_link_init(void)
 		    amc_rtm_link_control_ready_read());
 }
 
+#define AMC_RTM_LINK_RAM_BASE 0x20000000
+#define AMC_RTM_LINK_RAM_SIZE 0x00002000
+
+static unsigned int seed_to_data_32(unsigned int seed, int random)
+{
+	if (random)
+		return 1664525*seed + 1013904223;
+	else
+		return seed + 1;
+}
+
+static void amc_rtm_link_test(void)
+{
+	volatile unsigned int *array = (unsigned int *)AMC_RTM_LINK_RAM_BASE;
+	int i, errors;
+	unsigned int seed_32;
+
+	errors = 0;
+	seed_32 = 0;
+
+	for(i=0;i<AMC_RTM_LINK_RAM_SIZE/4;i++) {
+		seed_32 = seed_to_data_32(seed_32, 1);
+		array[i] = seed_32;
+	}
+
+	seed_32 = 0;
+	flush_cpu_dcache();
+	flush_l2_cache();
+	for(i=0;i<AMC_RTM_LINK_RAM_SIZE/4;i++) {
+		seed_32 = seed_to_data_32(seed_32, 1);
+		if(array[i] != seed_32)
+			errors++;
+	}
+
+	printf("errors: %d/%d\n", errors, AMC_RTM_LINK_RAM_SIZE/4);
+}
+
 static void console_service(void)
 {
 	char *str;
@@ -110,6 +148,8 @@ static void console_service(void)
 		reboot();
 	else if(strcmp(token, "amc_rtm_link_init") == 0)
 		amc_rtm_link_init();
+	else if(strcmp(token, "amc_rtm_link_test") == 0)
+		amc_rtm_link_test();
 	prompt();
 }
 
