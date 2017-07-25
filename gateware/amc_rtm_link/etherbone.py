@@ -8,10 +8,6 @@ and introduces some limitations:
 - no address spaces (rca/bca/wca/wff)
 - 32bits data and address
 - 1 record per frame
-
-TODO:
-- report error status?
-- use cyc field
 """
 
 from migen import *
