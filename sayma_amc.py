@@ -28,7 +28,7 @@ from litejesd204b.core import LiteJESD204BCoreTXControl
 
 from drtio.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
 
-from amc_rtm_link.phy import AMCMasterPLL, AMCMasterSerdes, AMCMasterInit, AMCMasterControl
+from amc_rtm_link.phy import SerdesPLL, UltrascaleSerdes, MasterInit, Control
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
 
@@ -597,16 +597,16 @@ class AMCRTMLinkTestSoC(SoCCore):
         ]
 
         # amc rtm link
-        amc_rtm_link_pll = AMCMasterPLL()
+        amc_rtm_link_pll = SerdesPLL(125e6, 1.25e9, vco_div=2)
         self.comb += amc_rtm_link_pll.refclk.eq(ClockSignal())
         self.submodules += amc_rtm_link_pll
 
         amc_rtm_link_pads = platform.request("amc_rtm_link")
-        amc_rtm_link_serdes = AMCMasterSerdes(amc_rtm_link_pll, amc_rtm_link_pads)
+        amc_rtm_link_serdes = UltrascaleSerdes(amc_rtm_link_pll, amc_rtm_link_pads, mode="master")
         self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
-        amc_rtm_link_init = AMCMasterInit(amc_rtm_link_serdes)
+        amc_rtm_link_init = MasterInit(amc_rtm_link_serdes, sync_pattern=0x123456789a, taps=512)
         self.submodules.amc_rtm_link_init = amc_rtm_link_init
-        self.submodules.amc_rtm_link_control = AMCMasterControl(amc_rtm_link_init)
+        self.submodules.amc_rtm_link_control = Control(amc_rtm_link_init, mode="master")
 
         amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
         amc_rtm_link_serdes.cd_serdes_20x.clk.attr.add("keep")

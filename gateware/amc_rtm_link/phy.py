@@ -896,23 +896,6 @@ class Control(Module, AutoCSR):
             self.bitslip.status.eq(init.bitslip)
         ]
 
-# amc specific
-
-class AMCMasterPLL(SerdesPLL):
-    def __init__(self):
-        SerdesPLL.__init__(self, 125e6, 1.25e9, vco_div=2)
-
-class AMCMasterSerdes(UltrascaleSerdes):
-    def __init__(self, pll, pads):
-        UltrascaleSerdes.__init__(self, pll, pads, mode="master")
-
-class AMCMasterInit(MasterInit):
-    def __init__(self, serdes):
-        MasterInit.__init__(self, serdes, sync_pattern=0x123456789a, taps=512)
-
-class AMCMasterControl(Control):
-    def __init__(self, init):
-        Control.__init__(self, init, mode="master")
 
 # rtm specific
 
