@@ -74,6 +74,7 @@ static void help(void)
 	puts("reboot            - reboot CPU");
 	puts("amc_rtm_link_init - (re)initialize AMC/RTM link");
 	puts("amc_rtm_link_test - test AMC/RTM link");
+	puts("amc_rtm_link_dump - dump AMC/RTM memorylink");
 }
 
 static void reboot(void)
@@ -134,6 +135,49 @@ static void amc_rtm_link_test(void)
 	printf("errors: %d/%d\n", errors, AMC_RTM_LINK_RAM_SIZE/4);
 }
 
+#define NUMBER_OF_BYTES_ON_A_LINE 16
+static void dump_bytes(unsigned int *ptr, int count, unsigned addr)
+{
+	char *data = (char *)ptr;
+	int line_bytes = 0, i = 0;
+
+	putsnonl("Memory dump:");
+	while(count > 0){
+		line_bytes =
+			(count > NUMBER_OF_BYTES_ON_A_LINE)?
+				NUMBER_OF_BYTES_ON_A_LINE : count;
+
+		printf("\n0x%08x  ", addr);
+		for(i=0;i<line_bytes;i++)
+			printf("%02x ", *(unsigned char *)(data+i));
+
+		for(;i<NUMBER_OF_BYTES_ON_A_LINE;i++)
+			printf("   ");
+
+		printf(" ");
+
+		for(i=0;i<line_bytes;i++) {
+			if((*(data+i) < 0x20) || (*(data+i) > 0x7e))
+				printf(".");
+			else
+				printf("%c", *(data+i));
+		}
+
+		for(;i<NUMBER_OF_BYTES_ON_A_LINE;i++)
+			printf(" ");
+
+		data += (char)line_bytes;
+		count -= line_bytes;
+		addr += line_bytes;
+	}
+	printf("\n");
+}
+
+static void amc_rtm_link_dump(void)
+{
+	dump_bytes(AMC_RTM_LINK_RAM_BASE, 8192, (unsigned)AMC_RTM_LINK_RAM_BASE);
+}
+
 static void console_service(void)
 {
 	char *str;
@@ -150,6 +194,8 @@ static void console_service(void)
 		amc_rtm_link_init();
 	else if(strcmp(token, "amc_rtm_link_test") == 0)
 		amc_rtm_link_test();
+	else if(strcmp(token, "amc_rtm_link_dump") == 0)
+		amc_rtm_link_dump();	
 	prompt();
 }
 
