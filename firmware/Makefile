@@ -1,9 +1,9 @@
 SAYMA_AMC_DIR=../build_sayma_amc/
 
 include $(SAYMA_AMC_DIR)/software/include/generated/variables.mak
-include $(SOC_DIRECTORY)/software/common.mak
+include $(MISOC_DIRECTORY)/software/common.mak
 
-OBJECTS=isr.o sdram.o main.o
+OBJECTS=isr.o main.o
 
 all: firmware.bin
 
@@ -21,8 +21,8 @@ firmware.elf: $(OBJECTS)
 		 $(SAYMA_AMC_DIR)/software/libbase/crt0-$(CPU).o \
 		$(OBJECTS) \
 		-L$(SAYMA_AMC_DIR)/software/libbase \
-		-L$(SAYMA_AMC_DIR)/software/libcompiler_rt \
-		-lbase-nofloat -lcompiler_rt
+		-L$(SAYMA_AMC_DIR)/software/libcompiler-rt \
+		-lbase-nofloat -lcompiler-rt
 	chmod -x $@
 
 main.o: main.c

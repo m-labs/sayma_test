@@ -6,8 +6,6 @@
 #include <uart.h>
 #include <console.h>
 
-#include "sdram.h"
-
 static char *readstr(void)
 {
 	char c[2];
@@ -72,8 +70,6 @@ static void help(void)
 	puts("Available commands:");
 	puts("help        - this command");
 	puts("reboot      - reboot CPU");
-	puts("meminit     - run a memory initialization");
-	puts("memtest     - run a memory test");
 }
 
 static void reboot(void)
@@ -93,10 +89,6 @@ static void console_service(void)
 		help();
 	else if(strcmp(token, "reboot") == 0)
 		reboot();
-	else if(strcmp(token, "meminit") == 0)
-		sdrinit();	
-	else if(strcmp(token, "memtest") == 0)
-		memtest();
 	prompt();
 }
 
