@@ -6,6 +6,8 @@
 #include <uart.h>
 #include <console.h>
 
+#include <generated/csr.h>
+
 static char *readstr(void)
 {
 	char c[2];
@@ -68,13 +70,30 @@ static void prompt(void)
 static void help(void)
 {
 	puts("Available commands:");
-	puts("help        - this command");
-	puts("reboot      - reboot CPU");
+	puts("help              - this command");
+	puts("reboot            - reboot CPU");
+	puts("amc_rtm_link_init - (re)initialize AMC/RTM link");
 }
 
 static void reboot(void)
 {
 	asm("call r0");
+}
+
+static void amc_rtm_link_init(void)
+{
+	amc_rtm_link_control_reset_write(1);
+	while ((amc_rtm_link_control_ready_read() & 0x1) == 0);
+	printf("delay_min: %d\n"
+		   "delay_max: %d\n"
+		   "delay: %d\n"
+		   "bitslip: %d\n"
+		   "ready: %d\n",
+		    amc_rtm_link_control_delay_min_read(),
+		    amc_rtm_link_control_delay_max_read(),
+		    amc_rtm_link_control_delay_read(),
+		    amc_rtm_link_control_bitslip_read(),
+		    amc_rtm_link_control_ready_read());
 }
 
 static void console_service(void)
@@ -89,6 +108,8 @@ static void console_service(void)
 		help();
 	else if(strcmp(token, "reboot") == 0)
 		reboot();
+	else if(strcmp(token, "amc_rtm_link_init") == 0)
+		amc_rtm_link_init();
 	prompt();
 }
 
