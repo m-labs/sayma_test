@@ -3,28 +3,17 @@ import sys
 sys.path.append("gateware") # FIXME
 
 from migen import *
-from misoc.interconnect.csr import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
-
 from migen.build.generic_platform import *
 from migen.build.xilinx import XilinxPlatform
 
+from misoc.cores.sdram_settings import MT41J256M16
+from misoc.cores.sdram_phy import kusddrphy
 from misoc.integration.soc_core import *
 from misoc.integration.soc_sdram import *
 from misoc.integration.builder import *
-from misoc.cores.uart import UARTWishboneBridge
+from misoc.interconnect.csr import *
 from misoc.interconnect import stream
-
-from litedram.modules import MT41J256M16
-from litedram.phy import kusddrphy
-from litedram.frontend.bist import LiteDRAMBISTGenerator
-from litedram.frontend.bist import LiteDRAMBISTChecker
-
-from litejesd204b.common import *
-from litejesd204b.phy.gth import GTHQuadPLL
-from litejesd204b.phy import LiteJESD204BPhyTX
-from litejesd204b.core import LiteJESD204BCoreTX
-from litejesd204b.core import LiteJESD204BCoreTXControl
 
 from drtio.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
 
@@ -33,9 +22,6 @@ from amc_rtm_link import packet
 from amc_rtm_link import etherbone
 
 from gateware import firmware
-
-from litescope import LiteScopeAnalyzer
-
 
 _io = [
     # clock
@@ -137,45 +123,6 @@ _io = [
         Misc("SLEW=FAST"),
     ),
 
-    # dac
-    ("dac_refclk", 0,
-        Subsignal("p", Pins("K6")),
-        Subsignal("n", Pins("K5")),
-    ),
-    ("dac_sysref", 0,
-        Subsignal("p", Pins("B10")),
-        Subsignal("n", Pins("A10")),
-        IOStandard("LVDS")
-    ),
-    ("dac_sync", 0,
-        Subsignal("p", Pins("L8")),
-        Subsignal("n", Pins("K8")),
-        IOStandard("LVDS")
-    ),
-    ("dac_jesd", 0,
-        Subsignal("txp", Pins("B6 C4 D6 F6 G4 J4 L4 N4")),
-        Subsignal("txn", Pins("B5 C3 D5 F5 G3 J3 L3 N3"))
-    ),
-
-    ("dac_refclk", 1,
-        Subsignal("p", Pins("K6")),
-        Subsignal("n", Pins("K5")),
-    ),
-    ("dac_sysref", 1,
-        Subsignal("p", Pins("B10")),
-        Subsignal("n", Pins("A10")),
-        IOStandard("LVDS")
-    ),
-    ("dac_sync", 1,
-        Subsignal("p", Pins("J9")),
-        Subsignal("n", Pins("H9")),
-        IOStandard("LVDS")
-    ),
-    ("dac_jesd", 1,
-        Subsignal("txp", Pins("R4 U4 W4 AA4 AC4 AE4 AG4 AH6")),
-        Subsignal("txn", Pins("R3 U3 W3 AA3 AC3 AE3 AG3 AH5"))
-    ),
-
     # drtio
     ("drtio_tx", 0,
         Subsignal("p", Pins("AN4 AM6")),
@@ -208,6 +155,7 @@ _io = [
         IOStandard("LVDS")
     ),
 ]
+
 
 class Platform(XilinxPlatform):
     default_clk_name = "clk50"
@@ -278,228 +226,38 @@ class _CRG(Module):
 
 
 class SDRAMTestSoC(SoCSDRAM):
-    csr_map = {
-        "ddrphy":    20,
-        "generator": 21,
-        "checker":   22,
-        "analyzer":  30
-    }
-    csr_map.update(SoCSDRAM.csr_map)
-
-    mem_map = {
-        "firmware_ram": 0x20000000,
-    }
-    mem_map.update(SoCSDRAM.mem_map)
-
-    def __init__(self, platform, ddram="ddram_32", with_cpu=False):
+    def __init__(self, platform, ddram="ddram_32"):
         clk_freq = int(125e6)
         SoCSDRAM.__init__(self, platform, clk_freq,
-            cpu_type="lm32" if with_cpu else None,
-            integrated_rom_size=0x8000 if with_cpu else 0,
-            integrated_sram_size=0x8000 if with_cpu else 0,
-            csr_data_width=8 if with_cpu else 32,
-            l2_size=128,
-            with_uart=with_cpu, uart_stub=False,
-            ident="Sayma AMC SDRAM Test Design",
-            with_timer=with_cpu
+            integrated_rom_size=0x8000,
+            integrated_sram_size=0x8000,
+            ident="Sayma AMC SDRAM Test Design"
         )
-        self.submodules.crg = _CRG(platform)
-        if not with_cpu:
-            self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                      clk_freq, baudrate=115200))
-            self.add_wb_master(self.cpu_or_bridge.wishbone)
+        self.csr_devices += ["ddrphy"]
 
+        self.submodules.crg = _CRG(platform)
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
-
-        # firmware
-        firmware_ram_size = 0x10000
-        firmware_filename = "firmware/firmware.bin"
-        self.submodules.firmware_ram = firmware.FirmwareROM(firmware_ram_size, firmware_filename)
-        self.register_mem("firmware_ram", self.mem_map["firmware_ram"], self.firmware_ram.bus, firmware_ram_size)
-        self.add_constant("ROM_BOOT_ADDRESS", self.mem_map["firmware_ram"])
 
         # sdram
         self.submodules.ddrphy = kusddrphy.KUSDDRPHY(platform.request(ddram))
+        self.config["KUSDDRPHY"] = 1
         sdram_module = MT41J256M16(self.clk_freq, "1:4")
-        self.register_sdram(self.ddrphy,
-                            sdram_module.geom_settings,
-                            sdram_module.timing_settings)
-
-        # sdram bist
-        if not with_cpu:
-            generator_user_port = self.sdram.crossbar.get_port(mode="write")
-            self.submodules.generator = LiteDRAMBISTGenerator(
-                generator_user_port, random=True)
-            checker_user_port = self.sdram.crossbar.get_port(mode="read")
-            self.submodules.checker = LiteDRAMBISTChecker(
-                checker_user_port, random=True)
-
-        # leds
-        led_counter = Signal(32)
-        self.sync += led_counter.eq(led_counter + 1)
-        self.comb += [
-            platform.request("user_led", 0).eq(led_counter[26]),
-            platform.request("user_led", 1).eq(led_counter[27]),
-            platform.request("user_led", 2).eq(led_counter[28]),
-            platform.request("user_led", 3).eq(led_counter[29])
-        ]
-
-        # analyzer
-        if not with_cpu:
-            dfi_phase_groups = []
-            for i in range(4):
-                dfi_phase_group = [
-                    self.ddrphy.dfi.phases[i].address,
-                    self.ddrphy.dfi.phases[i].bank,
-                    self.ddrphy.dfi.phases[i].ras_n,
-                    self.ddrphy.dfi.phases[i].cas_n,
-                    self.ddrphy.dfi.phases[i].we_n,
-                    self.ddrphy.dfi.phases[i].cs_n,
-                    self.ddrphy.dfi.phases[i].cke,
-                    self.ddrphy.dfi.phases[i].odt,
-                    self.ddrphy.dfi.phases[i].reset_n,
-                    self.ddrphy.dfi.phases[i].wrdata_en,
-                    self.ddrphy.dfi.phases[i].wrdata_mask,
-                    self.ddrphy.dfi.phases[i].wrdata,
-                    self.ddrphy.dfi.phases[i].rddata,
-                    self.ddrphy.dfi.phases[i].rddata_valid
-                ]
-                dfi_phase_groups.append(dfi_phase_group)
-            analyzer_signals = {
-                0 : dfi_phase_groups[0],
-                1 : dfi_phase_groups[1],
-                2 : dfi_phase_groups[2],
-                3 : dfi_phase_groups[3]
-            }
-            if not with_cpu:
-                self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 64)
-
-    def do_exit(self, vns):
-        if hasattr(self, "analyzer"):
-            self.analyzer.export_csv(vns, "test/sayma_amc/analyzer.csv")
-
-
-def get_phy_pads(jesd_pads, n):
-    class PHYPads:
-        def __init__(self, txp, txn):
-            self.txp = txp
-            self.txn = txn
-    return PHYPads(jesd_pads.txp[n], jesd_pads.txn[n])
-
-
-class JESDTestSoC(SoCCore):
-    csr_map = {
-        "control": 20
-    }
-    csr_map.update(SoCCore.csr_map)
-
-    def __init__(self, platform, dac=0):
-        clk_freq = int(125e6)
-        SoCCore.__init__(self, platform, clk_freq,
-            cpu_type=None,
-            csr_data_width=32,
-            with_uart=False,
-            ident="Sayma AMC JESD Test Design",
-            with_timer=False
-        )
-        self.submodules.crg = _CRG(platform)
-
-        # uart <--> wishbone
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
-
-        self.crg.cd_sys.clk.attr.add("keep")
-        platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
-
-        # jesd
-        ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
-        ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
-        settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
-        linerate = 10e9
-        refclk_freq = 250e6
-
-        self.clock_domains.cd_jesd = ClockDomain()
-        refclk_pads = platform.request("dac_refclk", dac)
-
-        self.refclk = Signal()
-        refclk_to_bufg_gt = Signal()
-        self.specials += [
-            Instance("IBUFDS_GTE3", i_CEB=0,
-                     p_REFCLK_HROW_CK_SEL=0b00,
-                     i_I=refclk_pads.p, i_IB=refclk_pads.n,
-                     o_O=self.refclk, o_ODIV2=refclk_to_bufg_gt),
-            Instance("BUFG_GT", i_I=refclk_to_bufg_gt, o_O=self.cd_jesd.clk)
-        ]
-        platform.add_period_constraint(self.cd_jesd.clk, 1e9/refclk_freq)
-
-        jesd_pads = platform.request("dac_jesd", dac)
-        phys = []
-        for i in range(len(jesd_pads.txp)):
-            if i%4 == 0:
-                qpll = GTHQuadPLL(self.refclk, refclk_freq, linerate)
-                self.submodules += qpll
-                print(qpll)
-
-            phy = LiteJESD204BPhyTX(
-                qpll, get_phy_pads(jesd_pads, i), self.clk_freq,
-                transceiver="gth")
-            #self.comb += phy.transmitter.produce_square_wave.eq(1)
-            platform.add_period_constraint(phy.transmitter.cd_tx.clk, 40*1e9/linerate)
-            platform.add_false_path_constraints(
-                self.crg.cd_sys.clk,
-                self.cd_jesd.clk,
-                phy.transmitter.cd_tx.clk)
-            phys.append(phy)
-        to_jesd = ClockDomainsRenamer("jesd")
-        self.submodules.core = to_jesd(LiteJESD204BCoreTX(phys, settings,
-                                                      converter_data_width=64))
-        self.submodules.control = to_jesd(LiteJESD204BCoreTXControl(self.core))
-        self.core.register_jsync(platform.request("dac_sync", dac))
-
-        # jesd pattern (ramp)
-        data0 = Signal(16)
-        data1 = Signal(16)
-        data2 = Signal(16)
-        data3 = Signal(16)
-        self.sync.jesd += [
-            data0.eq(data0 + 4096),   # freq = dacclk/32
-            data1.eq(data1 + 8192),   # freq = dacclk/16
-            data2.eq(data2 + 16384),  # freq = dacclk/8
-            data3.eq(data3 + 32768)   # freq = dacclk/4
-        ]
-        self.comb += [
-            self.core.sink.converter0.eq(Cat(data0, data0)),
-            self.core.sink.converter1.eq(Cat(data1, data1)),
-            self.core.sink.converter2.eq(Cat(data2, data2)),
-            self.core.sink.converter3.eq(Cat(data3, data3))
-        ]
-
-    def do_exit(self, vns):
-        pass
+        self.register_sdram(self.ddrphy, "minicon",
+                            sdram_module.geom_settings, sdram_module.timing_settings)
 
 
 class DRTIOTestSoC(SoCCore):
-    csr_map = {
-        "drtio_phy": 20
-    }
-    csr_map.update(SoCCore.csr_map)
-
     def __init__(self, platform, pll="cpll", dw=20):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
-            cpu_type=None,
-            csr_data_width=32,
-            with_uart=False,
-            ident="Sayma AMC DRTIO Test Design",
-            with_timer=False
+            integrated_rom_size=0x8000,
+            integrated_sram_size=0x8000,
+            ident="Sayma AMC DRTIO Test Design"
         )
-        self.submodules.crg = _CRG(platform)
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
+        self.csr_devices += ["drtio_phy"]
 
+        self.submodules.crg = _CRG(platform)
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
@@ -554,17 +312,8 @@ class DRTIOTestSoC(SoCCore):
                 drtio_phy.gths[i].cd_tx.clk,
                 drtio_phy.gths[i].cd_rx.clk)
 
-    def do_exit(self, vns):
-        pass
-
 
 class AMCRTMLinkTestSoC(SoCCore):
-    csr_map = {
-        "amc_rtm_link_control": 20,
-        "analyzer":             30
-    }
-    csr_map.update(SoCCore.csr_map)
-
     mem_map = {
         "amc_rtm_link": 0x20000000,  # (default shadow @0xa0000000)
     }
@@ -573,19 +322,14 @@ class AMCRTMLinkTestSoC(SoCCore):
     def __init__(self, platform, with_analyzer=False):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
-            cpu_type=None,
-            csr_data_width=32,
-            with_uart=False,
-            ident="Sayma AMC / AMC <--> RTM Link Test Design",
-            with_timer=False
+            integrated_rom_size=0x8000,
+            integrated_sram_size=0x8000,
+            integrated_main_ram_size=0x8000,
+            ident="Sayma AMC / AMC <--> RTM Link Test Design"
         )
+        self.csr_devices += ["amc_rtm_link_control"]
+
         self.submodules.crg = _CRG(platform)
-
-        # uart <--> wishbone
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
-
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
@@ -618,7 +362,6 @@ class AMCRTMLinkTestSoC(SoCCore):
             self.crg.cd_sys.clk,
             amc_rtm_link_serdes.cd_serdes.clk)
 
-
         # wishbone slave
         amc_rtm_link_core = packet.Core(clk_freq)
         amc_rtm_link_port = amc_rtm_link_core.crossbar.get_port(0x01)
@@ -637,16 +380,16 @@ class AMCRTMLinkTestSoC(SoCCore):
             
             # core --> serdes
             amc_rtm_link_core.source.connect(amc_rtm_link_tx_cdc.sink),
-            If(amc_rtm_link_tx_cdc.source.valid & amc_rtm_link_init.ready,
+            If(amc_rtm_link_tx_cdc.source.stb & amc_rtm_link_init.ready,
                 amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_tx_cdc.source.data[0:8]),
                 amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_tx_cdc.source.data[8:16]),
                 amc_rtm_link_serdes.encoder.d[2].eq(amc_rtm_link_tx_cdc.source.data[16:24]),
                 amc_rtm_link_serdes.encoder.d[3].eq(amc_rtm_link_tx_cdc.source.data[24:32])
             ),
-            amc_rtm_link_tx_cdc.source.ready.eq(amc_rtm_link_init.ready),
+            amc_rtm_link_tx_cdc.source.ack.eq(amc_rtm_link_init.ready),
 
             # serdes --> core
-            amc_rtm_link_rx_cdc.sink.valid.eq(amc_rtm_link_init.ready),
+            amc_rtm_link_rx_cdc.sink.stb.eq(amc_rtm_link_init.ready),
             amc_rtm_link_rx_cdc.sink.data[0:8].eq(amc_rtm_link_serdes.decoders[0].d),
             amc_rtm_link_rx_cdc.sink.data[8:16].eq(amc_rtm_link_serdes.decoders[1].d),
             amc_rtm_link_rx_cdc.sink.data[16:24].eq(amc_rtm_link_serdes.decoders[2].d),
@@ -655,92 +398,23 @@ class AMCRTMLinkTestSoC(SoCCore):
         ]
         self.add_wb_slave(mem_decoder(self.mem_map["amc_rtm_link"]), amc_rtm_link_etherbone.wishbone.bus)
 
-        # analyzer
-        if with_analyzer:
-            wishbone_access = Signal()
-            self.comb += wishbone_access.eq(amc_rtm_link_etherbone.wishbone.bus.stb &
-                                            amc_rtm_link_etherbone.wishbone.bus.cyc)
-            init_group = [
-                wishbone_access,
-                amc_rtm_link_init.ready,
-                amc_rtm_link_init.delay,
-                amc_rtm_link_init.bitslip,
-                amc_rtm_link_init.delay_min,
-                amc_rtm_link_init.delay_min_found,
-                amc_rtm_link_init.delay_max,
-                amc_rtm_link_init.delay_max_found
-            ]
-            serdes_group = [
-                wishbone_access,
-                amc_rtm_link_serdes.encoder.k[0],
-                amc_rtm_link_serdes.encoder.d[0],
-                amc_rtm_link_serdes.encoder.k[1],
-                amc_rtm_link_serdes.encoder.d[1],
-                amc_rtm_link_serdes.encoder.k[2],
-                amc_rtm_link_serdes.encoder.d[2],
-                amc_rtm_link_serdes.encoder.k[3],
-                amc_rtm_link_serdes.encoder.d[3],
-
-                amc_rtm_link_serdes.decoders[0].d,
-                amc_rtm_link_serdes.decoders[0].k,
-                amc_rtm_link_serdes.decoders[1].d,
-                amc_rtm_link_serdes.decoders[1].k,
-                amc_rtm_link_serdes.decoders[2].d,
-                amc_rtm_link_serdes.decoders[2].k,
-                amc_rtm_link_serdes.decoders[3].d,
-                amc_rtm_link_serdes.decoders[3].k,
-            ]
-            etherbone_source_group = [
-                wishbone_access,
-                amc_rtm_link_etherbone.wishbone.source
-            ]
-            etherbone_sink_group = [
-                wishbone_access,
-                amc_rtm_link_etherbone.wishbone.sink
-            ]
-            wishbone_group = [
-                wishbone_access,
-                amc_rtm_link_etherbone.wishbone.bus
-            ]
-            analyzer_signals = {
-                0 : init_group,
-                1 : serdes_group,
-                2 : etherbone_source_group,
-                3 : etherbone_sink_group,
-                4 : wishbone_group
-            }
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 128, cd="sys")
-
-    def do_exit(self, vns):
-        if hasattr(self, "analyzer"):
-            self.analyzer.export_csv(vns, "test/sayma_amc/analyzer.csv")
-
 
 def main():
     platform = Platform()
-    compile_gateware = True
     if len(sys.argv) < 2:
-        print("missing target (ddram or jesd or drtio or amc_rtm_link)")
+        print("missing target (ddram or drtio or amc_rtm_link)")
         exit()
     if sys.argv[1] == "ddram":
         dw = "32"
-        with_cpu = False
         if len(sys.argv) > 2:
             dw = sys.argv[2]
-        if len(sys.argv) > 3:
-            with_cpu = bool(sys.argv[3])
-            #compile_gateware = False
-        soc = SDRAMTestSoC(platform, "ddram_" + dw, with_cpu)
-    elif sys.argv[1] == "jesd":
-        soc = JESDTestSoC(platform)
+        soc = SDRAMTestSoC(platform, "ddram_" + dw)
     elif sys.argv[1] == "drtio":
         soc = DRTIOTestSoC(platform)
     elif sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
-    builder = Builder(soc, output_dir="build_sayma_amc", csr_csv="test/sayma_amc/csr.csv",
-        compile_gateware=compile_gateware)
+    builder = Builder(soc, output_dir="build_sayma_amc")
     vns = builder.build()
-    soc.do_exit(vns)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 from math import ceil
+from copy import copy
 from collections import OrderedDict
 
 from migen import *
@@ -6,6 +7,91 @@ from migen.genlib.misc import WaitTimer
 
 from misoc.interconnect import stream
 from misoc.interconnect.stream import EndpointDescription
+
+
+def pack_layout(l, n):
+    return [("chunk"+str(i), l) for i in range(n)]
+
+
+class Unpack(Module):
+    def __init__(self, n, layout_to, reverse=False):
+        self.source = source = stream.Endpoint(layout_to)
+        description_from = copy(source.description)
+        description_from.payload_layout = pack_layout(description_from.payload_layout, n)
+        self.sink = sink = stream.Endpoint(description_from)
+
+        # # #
+
+        mux = Signal(max=n)
+        first = Signal()
+        eop = Signal()
+        self.comb += [
+            first.eq(mux == 0),
+            eop.eq(mux == (n-1)),
+            source.stb.eq(sink.stb),
+            sink.ack.eq(eop & source.ack)
+        ]
+        self.sync += [
+            If(source.stb & source.ack,
+                If(eop,
+                    mux.eq(0)
+                ).Else(
+                    mux.eq(mux + 1)
+                )
+            )
+        ]
+        cases = {}
+        for i in range(n):
+            chunk = n-i-1 if reverse else i
+            cases[i] = [source.payload.raw_bits().eq(getattr(sink.payload, "chunk"+str(chunk)).raw_bits())]
+        self.comb += Case(mux, cases).makedefault()
+        self.comb += [
+            source.eop.eq(sink.eop & eop)
+        ]
+
+
+class Pack(Module):
+    def __init__(self, layout_from, n, reverse=False):
+        self.sink = sink = stream.Endpoint(layout_from)
+        description_to = copy(sink.description)
+        description_to.payload_layout = pack_layout(description_to.payload_layout, n)
+        self.source = source = stream.Endpoint(description_to)
+
+        # # #
+
+        demux = Signal(max=n)
+
+        load_part = Signal()
+        strobe_all = Signal()
+        cases = {}
+        for i in range(n):
+            chunk = n-i-1 if reverse else i
+            cases[i] = [getattr(source.payload, "chunk"+str(chunk)).raw_bits().eq(sink.payload.raw_bits())]
+        self.comb += [
+            sink.ack.eq(~strobe_all | source.ack),
+            source.stb.eq(strobe_all),
+            load_part.eq(sink.stb & sink.ack)
+        ]
+
+        demux_eop = ((demux == (n - 1)) | sink.eop)
+
+        self.sync += [
+            If(source.ack, strobe_all.eq(0)),
+            If(load_part,
+                Case(demux, cases),
+                If(demux_eop,
+                    demux.eq(0),
+                    strobe_all.eq(1)
+                ).Else(
+                    demux.eq(demux + 1)
+                )
+            ),
+            If(source.stb & source.ack,
+                source.eop.eq(sink.eop),
+            ).Elif(sink.stb & sink.ack,
+                source.eop.eq(sink.eop | source.eop)
+            )
+        ]
 
 
 def reverse_bytes(signal):
@@ -123,7 +209,7 @@ class Dispatcher(Module):
                 else:
                     idx = i
                 cases[idx] = [master.connect(slave)]
-            cases["default"] = [master.ready.eq(1)]
+            cases["default"] = [master.ack.eq(1)]
             self.comb += Case(sel, cases)
 
 
@@ -170,6 +256,7 @@ class UserPort(SlavePort):
         SlavePort.__init__(self, dw, tag)
 
 
+
 class Packetizer(Module):
     def __init__(self):
         self.sink = sink = stream.Endpoint(user_description(32))
@@ -192,7 +279,7 @@ class Packetizer(Module):
             sink.length
         ]
 
-        header_unpack = stream.Unpack(len(header), phy_description(32))
+        header_unpack = Unpack(len(header), phy_description(32))
         self.submodules += header_unpack
 
         for i, byte in enumerate(header):
@@ -203,26 +290,26 @@ class Packetizer(Module):
         self.submodules += fsm
 
         fsm.act("IDLE",
-            If(sink.valid,
+            If(sink.stb,
                 NextState("INSERT_HEADER")
             )
         )
 
         fsm.act("INSERT_HEADER",
-            header_unpack.sink.valid.eq(1),
-            source.valid.eq(1),
+            header_unpack.sink.stb.eq(1),
+            source.stb.eq(1),
             source.data.eq(header_unpack.source.data),
-            header_unpack.source.ready.eq(source.ready),
-            If(header_unpack.sink.ready,
+            header_unpack.source.ack.eq(source.ack),
+            If(header_unpack.sink.ack,
                 NextState("COPY")
             )
         )
 
         fsm.act("COPY",
-            source.valid.eq(sink.valid),
+            source.stb.eq(sink.stb),
             source.data.eq(sink.data),
-            sink.ready.eq(source.ready),
-            If(source.ready & sink.last,
+            sink.ack.eq(source.ack),
+            If(source.ack & sink.eop,
                 NextState("IDLE")
             )
         )
@@ -250,7 +337,7 @@ class Depacketizer(Module):
             source.length
         ]
 
-        header_pack = ResetInserter()(stream.Pack(phy_description(32), len(header)))
+        header_pack = ResetInserter()(Pack(phy_description(32), len(header)))
         self.submodules += header_pack
 
         for i, byte in enumerate(header):
@@ -262,39 +349,39 @@ class Depacketizer(Module):
 
         self.comb += preamble.eq(sink.data)
         fsm.act("IDLE",
-            sink.ready.eq(1),
-            If((sink.data == 0x5aa55aa5) & sink.valid,
+            sink.ack.eq(1),
+            If((sink.data == 0x5aa55aa5) & sink.stb,
                    NextState("RECEIVE_HEADER")
             ),
-            header_pack.source.ready.eq(1)
+            header_pack.source.ack.eq(1)
         )
 
         self.submodules.timer = WaitTimer(clk_freq*timeout)
         self.comb += self.timer.wait.eq(~fsm.ongoing("IDLE"))
 
         fsm.act("RECEIVE_HEADER",
-            header_pack.sink.valid.eq(sink.valid),
+            header_pack.sink.stb.eq(sink.stb),
             header_pack.sink.payload.eq(sink.payload),
             If(self.timer.done,
                 NextState("IDLE")
-            ).Elif(header_pack.source.valid,
+            ).Elif(header_pack.source.stb,
                 NextState("COPY")
             ).Else(
-                sink.ready.eq(1)
+                sink.ack.eq(1)
             )
         )
 
         self.comb += header_pack.reset.eq(self.timer.done)
 
-        last = Signal()
+        eop = Signal()
         cnt = Signal(32)
 
         fsm.act("COPY",
-            source.valid.eq(sink.valid),
-            source.last.eq(last),
+            source.stb.eq(sink.stb),
+            source.eop.eq(eop),
             source.data.eq(sink.data),
-            sink.ready.eq(source.ready),
-            If((source.valid & source.ready & last) | self.timer.done,
+            sink.ack.eq(source.ack),
+            If((source.stb & source.ack & eop) | self.timer.done,
                 NextState("IDLE")
             )
         )
@@ -302,10 +389,10 @@ class Depacketizer(Module):
         self.sync += \
             If(fsm.ongoing("IDLE"),
                 cnt.eq(0)
-            ).Elif(source.valid & source.ready,
+            ).Elif(source.stb & source.ack,
                 cnt.eq(cnt + 1)
             )
-        self.comb += last.eq(cnt == source.length[2:] - 1)
+        self.comb += eop.eq(cnt == source.length[2:] - 1)
 
 
 class Crossbar(Module):
@@ -346,20 +433,18 @@ class Core(Module):
 
         # # #
 
-        rx_pipeline = [sink]
-        tx_pipeline = [source]
-
         # depacketizer / packetizer
         self.submodules.depacketizer = Depacketizer(clk_freq)
         self.submodules.packetizer = Packetizer()
-        rx_pipeline += [self.depacketizer]
-        tx_pipeline += [self.packetizer]
 
         # crossbar
         self.submodules.crossbar = Crossbar()
-        rx_pipeline += [self.crossbar.master]
-        tx_pipeline += [self.crossbar.master]
 
-        # graph
-        self.submodules.rx_pipeline = stream.Pipeline(*rx_pipeline)
-        self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
+        # dataflow
+        self.comb += [
+            sink.connect(self.depacketizer.sink),
+            self.depacketizer.source.connect(self.crossbar.master.sink),
+
+            self.crossbar.master.source.connect(self.packetizer.sink),
+            self.packetizer.source.connect(self.source)
+        ]

@@ -3,7 +3,6 @@ import sys
 sys.path.append("gateware") # FIXME
 
 from migen import *
-from misoc.interconnect.csr import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from migen.build.generic_platform import *
@@ -11,16 +10,13 @@ from migen.build.xilinx import XilinxPlatform
 
 from misoc.integration.soc_core import *
 from misoc.integration.builder import *
-from misoc.cores.uart import UARTWishboneBridge
-from misoc.cores.spi import SPIMaster
+from misoc.interconnect.csr import *
 from misoc.interconnect import stream
 from misoc.interconnect import wishbone
 
 from amc_rtm_link.phy import RTMSlavePLL, RTMSlaveSerdes, RTMSlaveInit, RTMSlaveControl
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
-
-from litescope import LiteScopeAnalyzer
 
 
 _io = [
@@ -33,18 +29,6 @@ _io = [
         Subsignal("rx", Pins("B17")),
         IOStandard("LVCMOS25")
     ),
-
-    # dac
-    ("dac_spi", 0,
-        Subsignal("clk", Pins("T13")),
-        Subsignal("cs_n", Pins("U14")),
-        Subsignal("mosi", Pins("V17")),
-        Subsignal("miso", Pins("R13")),
-        IOStandard("LVCMOS25")
-    ),
-    ("dac_txen", 0, Pins("V16"), IOStandard("LVCMOS25")),
-    ("dac_txen", 1, Pins("U16"), IOStandard("LVCMOS25")),
-    ("dac_rst_n", 0, Pins("U15"), IOStandard("LVCMOS25")),
 
     # amc_rtm_link
     ("amc_rtm_link", 0,
@@ -112,67 +96,22 @@ class _CRG(Module):
         self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
 
-class JESDTestSoC(SoCCore):
-    csr_map = {
-        "spi":     20
-    }
-    csr_map.update(SoCCore.csr_map)
-
-    def __init__(self, platform, dac=0):
-        clk_freq = int(125e6)
-        SoCCore.__init__(self, platform, clk_freq,
-            cpu_type=None,
-            csr_data_width=32,
-            with_uart=False,
-            ident="Sayma AMC JESD Test Design",
-            with_timer=False
-        )
-        self.submodules.crg = _CRG(platform)
-
-        # uart <--> wishbone
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
-
-        # dac spi
-        spi_pads = platform.request("dac_spi", dac)
-        self.submodules.spi = SPIMaster(spi_pads)
-
-        # dac control
-        self.comb += [
-            platform.request("dac_txen", dac).eq(1),
-            platform.request("dac_rst_n", dac).eq(1)
-        ]
-
-
 class AMCRTMLinkTestSoC(SoCCore):
-    csr_map = {
-        "amc_rtm_link_control": 20,
-        "analyzer":             30
-    }
-    csr_map.update(SoCCore.csr_map)
-
     mem_map = {
         "amc_rtm_link": 0x20000000,  # (default shadow @0xa0000000)
     }
     mem_map.update(SoCCore.mem_map)
 
-    def __init__(self, platform, with_analyzer=False):
+    def __init__(self, platform):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
-            cpu_type=None,
-            csr_data_width=32,
-            with_uart=False,
-            ident="Sayma RTM / AMC <--> RTM Link Test Design",
-            with_timer=False
+            integrated_rom_size=0x8000,
+            integrated_sram_size=0x8000,
+            ident="Sayma RTM / AMC <--> RTM Link Test Design"
         )
+        self.csr_devices += ["amc_rtm_link_control"]
+
         self.submodules.crg = _CRG(platform)
-
-        # uart <--> wishbone
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
-                                                  clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
-
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
@@ -198,7 +137,6 @@ class AMCRTMLinkTestSoC(SoCCore):
             self.crg.cd_sys.clk,
             amc_rtm_link_serdes.cd_serdes.clk)
 
-
         # wishbone master
         amc_rtm_link_core = packet.Core(clk_freq)
         amc_rtm_link_port = amc_rtm_link_core.crossbar.get_port(0x01)
@@ -217,16 +155,16 @@ class AMCRTMLinkTestSoC(SoCCore):
             
             # core --> serdes
             amc_rtm_link_core.source.connect(amc_rtm_link_tx_cdc.sink),
-            If(amc_rtm_link_tx_cdc.source.valid & amc_rtm_link_init.ready,
+            If(amc_rtm_link_tx_cdc.source.stb & amc_rtm_link_init.ready,
                 amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_tx_cdc.source.data[0:8]),
                 amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_tx_cdc.source.data[8:16]),
                 amc_rtm_link_serdes.encoder.d[2].eq(amc_rtm_link_tx_cdc.source.data[16:24]),
                 amc_rtm_link_serdes.encoder.d[3].eq(amc_rtm_link_tx_cdc.source.data[24:32])
             ),
-            amc_rtm_link_tx_cdc.source.ready.eq(amc_rtm_link_init.ready),
+            amc_rtm_link_tx_cdc.source.ack.eq(amc_rtm_link_init.ready),
 
             # serdes --> core
-            amc_rtm_link_rx_cdc.sink.valid.eq(amc_rtm_link_init.ready),
+            amc_rtm_link_rx_cdc.sink.stb.eq(amc_rtm_link_init.ready),
             amc_rtm_link_rx_cdc.sink.data[0:8].eq(amc_rtm_link_serdes.decoders[0].d),
             amc_rtm_link_rx_cdc.sink.data[8:16].eq(amc_rtm_link_serdes.decoders[1].d),
             amc_rtm_link_rx_cdc.sink.data[16:24].eq(amc_rtm_link_serdes.decoders[2].d),
@@ -239,81 +177,16 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules.amc_rtm_link_sram = wishbone.SRAM(8192)
         self.register_mem("amc_rtm_link_sram", self.mem_map["amc_rtm_link"], self.amc_rtm_link_sram.bus, 8192)
 
-        # analyzer
-        if with_analyzer:
-            wishbone_access = Signal()
-            self.comb += wishbone_access.eq((amc_rtm_link_serdes.decoders[0].d == 0xa5) |
-                                            (amc_rtm_link_serdes.decoders[1].d == 0x5a))
-            init_group = [
-                wishbone_access,
-                amc_rtm_link_init.ready,
-                amc_rtm_link_init.delay,
-                amc_rtm_link_init.bitslip,
-                amc_rtm_link_init.delay_min,
-                amc_rtm_link_init.delay_min_found,
-                amc_rtm_link_init.delay_max,
-                amc_rtm_link_init.delay_max_found
-            ]
-            serdes_group = [
-                wishbone_access,
-                amc_rtm_link_serdes.encoder.k[0],
-                amc_rtm_link_serdes.encoder.d[0],
-                amc_rtm_link_serdes.encoder.k[1],
-                amc_rtm_link_serdes.encoder.d[1],
-                amc_rtm_link_serdes.encoder.k[2],
-                amc_rtm_link_serdes.encoder.d[2],
-                amc_rtm_link_serdes.encoder.k[3],
-                amc_rtm_link_serdes.encoder.d[3],
-    
-                amc_rtm_link_serdes.decoders[0].d,
-                amc_rtm_link_serdes.decoders[0].k,
-                amc_rtm_link_serdes.decoders[1].d,
-                amc_rtm_link_serdes.decoders[1].k,
-                amc_rtm_link_serdes.decoders[2].d,
-                amc_rtm_link_serdes.decoders[2].k,
-                amc_rtm_link_serdes.decoders[3].d,
-                amc_rtm_link_serdes.decoders[3].k,
-            ]
-            etherbone_source_group = [
-                wishbone_access,
-                amc_rtm_link_etherbone.wishbone.source
-            ]
-            etherbone_sink_group = [
-                wishbone_access,
-                amc_rtm_link_etherbone.wishbone.sink
-            ]
-            wishbone_group = [
-                wishbone_access,
-                amc_rtm_link_etherbone.wishbone.bus
-            ]
-            analyzer_signals = {
-                0 : init_group,
-                1 : serdes_group,
-                2 : etherbone_source_group,
-                3 : etherbone_sink_group,
-                4 : wishbone_group
-            }
-            self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 128, cd="sys")
-
-    def do_exit(self, vns):
-        if hasattr(self, "analyzer"):
-            self.analyzer.export_csv(vns, "test/sayma_rtm/analyzer.csv")
-
 
 def main():
     platform = Platform()
-    compile_gateware = True
     if len(sys.argv) < 2:
-        print("missing target (jesd or amc_rtm_link)")
+        print("missing target (amc_rtm_link)")
         exit()
-    if sys.argv[1] == "jesd":
-        soc = JESDTestSoC(platform)
-    elif sys.argv[1] == "amc_rtm_link":
+    if sys.argv[1] == "amc_rtm_link":
         soc = AMCRTMLinkTestSoC(platform)
-    builder = Builder(soc, output_dir="build_sayma_rtm", csr_csv="test/sayma_rtm/csr.csv",
-        compile_gateware=compile_gateware)
+    builder = Builder(soc, output_dir="build_sayma_rtm")
     vns = builder.build()
-    soc.do_exit(vns)
 
 
 if __name__ == "__main__":

@@ -71,14 +71,14 @@ class Packetizer(Module):
             idle_next_state = "SEND_HEADER"
 
         fsm.act("IDLE",
-            sink.ready.eq(1),
+            sink.ack.eq(1),
             counter_reset.eq(1),
-            If(sink.valid,
-                sink.ready.eq(0),
-                source.valid.eq(1),
-                source.last.eq(0),
+            If(sink.stb,
+                sink.ack.eq(0),
+                source.stb.eq(1),
+                source.eop.eq(0),
                 source.data.eq(self.header[:dw]),
-                If(source.valid & source.ready,
+                If(source.stb & source.ack,
                     load.eq(1),
                     NextState(idle_next_state)
                 )
@@ -86,10 +86,10 @@ class Packetizer(Module):
         )
         if header_words != 1:
             fsm.act("SEND_HEADER",
-                source.valid.eq(1),
-                source.last.eq(0),
+                source.stb.eq(1),
+                source.eop.eq(0),
                 source.data.eq(header_reg[dw:2*dw]),
-                If(source.valid & source.ready,
+                If(source.stb & source.ack,
                     shift.eq(1),
                     counter_ce.eq(1),
                     If(counter == header_words-2,
@@ -100,12 +100,12 @@ class Packetizer(Module):
         if hasattr(sink, "error"):
             self.comb += source.error.eq(sink.error)
         fsm.act("COPY",
-            source.valid.eq(sink.valid),
-            source.last.eq(sink.last),
+            source.stb.eq(sink.stb),
+            source.eop.eq(sink.eop),
             source.data.eq(sink.data),
-            If(source.valid & source.ready,
-                sink.ready.eq(1),
-                If(source.last,
+            If(source.stb & source.ack,
+                sink.ack.eq(1),
+                If(source.eop,
                     NextState("IDLE")
                 )
             )
@@ -157,17 +157,17 @@ class Depacketizer(Module):
             idle_next_state = "RECEIVE_HEADER"
 
         fsm.act("IDLE",
-            sink.ready.eq(1),
+            sink.ack.eq(1),
             counter_reset.eq(1),
-            If(sink.valid,
+            If(sink.stb,
                 shift.eq(1),
                 NextState(idle_next_state)
             )
         )
         if header_words != 1:
             fsm.act("RECEIVE_HEADER",
-                sink.ready.eq(1),
-                If(sink.valid,
+                sink.ack.eq(1),
+                If(sink.stb,
                     counter_ce.eq(1),
                     shift.eq(1),
                     If(counter == header_words-2,
@@ -178,20 +178,20 @@ class Depacketizer(Module):
         no_payload = Signal()
         self.sync += \
             If(fsm.before_entering("COPY"),
-                no_payload.eq(sink.last)
+                no_payload.eq(sink.eop)
             )
 
         if hasattr(sink, "error"):
             self.comb += source.error.eq(sink.error)
         self.comb += [
-            source.last.eq(sink.last | no_payload),
+            source.eop.eq(sink.eop | no_payload),
             source.data.eq(sink.data),
             header.decode(self.header, source)
         ]
         fsm.act("COPY",
-            sink.ready.eq(source.ready),
-            source.valid.eq(sink.valid | no_payload),
-            If(source.valid & source.ready & source.last,
+            sink.ack.eq(source.ack),
+            source.stb.eq(sink.stb | no_payload),
+            If(source.stb & source.ack & source.eop,
                 NextState("IDLE")
             )
         )
@@ -296,9 +296,9 @@ class EtherbonePacketTX(Module):
 
         self.submodules.packetizer = packetizer = EtherbonePacketPacketizer()
         self.comb += [
-            packetizer.sink.valid.eq(sink.valid),
-            packetizer.sink.last.eq(sink.last),
-            sink.ready.eq(packetizer.sink.ready),
+            packetizer.sink.stb.eq(sink.stb),
+            packetizer.sink.eop.eq(sink.eop),
+            sink.ack.eq(packetizer.sink.ack),
 
             packetizer.sink.magic.eq(etherbone_magic),
             packetizer.sink.port_size.eq(32//8),
@@ -310,16 +310,16 @@ class EtherbonePacketTX(Module):
         ]
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
-            If(packetizer.source.valid,
-                packetizer.source.ready.eq(0),
+            packetizer.source.ack.eq(1),
+            If(packetizer.source.stb,
+                packetizer.source.ack.eq(0),
                 NextState("SEND")
             )
         )
         fsm.act("SEND",
             packetizer.source.connect(source),
             source.length.eq(sink.length + etherbone_packet_header.length),
-            If(source.valid & source.last & source.ready,
+            If(source.stb & source.eop & source.ack,
                 NextState("IDLE")
             )
         )
@@ -345,26 +345,26 @@ class EtherbonePacketRX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ready.eq(1),
-            If(depacketizer.source.valid,
-                depacketizer.source.ready.eq(0),
+            depacketizer.source.ack.eq(1),
+            If(depacketizer.source.stb,
+                depacketizer.source.ack.eq(0),
                 NextState("CHECK")
             )
         )
-        valid = Signal()
-        self.sync += valid.eq(
-            depacketizer.source.valid &
+        stb = Signal()
+        self.sync += stb.eq(
+            depacketizer.source.stb &
             (depacketizer.source.magic == etherbone_magic)
         )
         fsm.act("CHECK",
-            If(valid,
+            If(stb,
                 NextState("PRESENT")
             ).Else(
                 NextState("DROP")
             )
         )
         self.comb += [
-            source.last.eq(depacketizer.source.last),
+            source.eop.eq(depacketizer.source.eop),
 
             source.nr.eq(depacketizer.source.nr),
 
@@ -373,17 +373,17 @@ class EtherbonePacketRX(Module):
             source.length.eq(sink.length - etherbone_packet_header.length)
         ]
         fsm.act("PRESENT",
-            source.valid.eq(depacketizer.source.valid),
-            depacketizer.source.ready.eq(source.ready),
-            If(source.valid & source.last & source.ready,
+            source.stb.eq(depacketizer.source.stb),
+            depacketizer.source.ack.eq(source.ack),
+            If(source.stb & source.eop & source.ack,
                 NextState("IDLE")
             )
         )
         fsm.act("DROP",
-            depacketizer.source.ready.eq(1),
-            If(depacketizer.source.valid &
-               depacketizer.source.last &
-               depacketizer.source.ready,
+            depacketizer.source.ack.eq(1),
+            If(depacketizer.source.stb &
+               depacketizer.source.eop &
+               depacketizer.source.ack,
                 NextState("IDLE")
             )
         )
@@ -445,9 +445,9 @@ class EtherboneRecordReceiver(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            fifo.source.ready.eq(1),
+            fifo.source.ack.eq(1),
             counter_reset.eq(1),
-            If(fifo.source.valid,
+            If(fifo.source.stb,
                 base_addr_update.eq(1),
                 If(fifo.source.wcount,
                     NextState("RECEIVE_WRITES")
@@ -458,17 +458,17 @@ class EtherboneRecordReceiver(Module):
             )
         )
         fsm.act("RECEIVE_WRITES",
-            source.valid.eq(fifo.source.valid),
-            source.last.eq(counter == fifo.source.wcount-1),
+            source.stb.eq(fifo.source.stb),
+            source.eop.eq(counter == fifo.source.wcount-1),
             source.count.eq(fifo.source.wcount),
             source.be.eq(fifo.source.byte_enable),
             source.addr.eq(base_addr[2:] + counter),
             source.we.eq(1),
             source.data.eq(fifo.source.data),
-            fifo.source.ready.eq(source.ready),
-            If(source.valid & source.ready,
+            fifo.source.ack.eq(source.ack),
+            If(source.stb & source.ack,
                 counter_ce.eq(1),
-                If(source.last,
+                If(source.eop,
                     If(fifo.source.rcount,
                         NextState("RECEIVE_BASE_RET_ADDR")
                     ).Else(
@@ -479,21 +479,21 @@ class EtherboneRecordReceiver(Module):
         )
         fsm.act("RECEIVE_BASE_RET_ADDR",
             counter_reset.eq(1),
-            If(fifo.source.valid,
+            If(fifo.source.stb,
                 base_addr_update.eq(1),
                 NextState("RECEIVE_READS")
             )
         )
         fsm.act("RECEIVE_READS",
-            source.valid.eq(fifo.source.valid),
-            source.last.eq(counter == fifo.source.rcount-1),
+            source.stb.eq(fifo.source.stb),
+            source.eop.eq(counter == fifo.source.rcount-1),
             source.count.eq(fifo.source.rcount),
             source.base_addr.eq(base_addr),
             source.addr.eq(fifo.source.data[2:]),
-            fifo.source.ready.eq(source.ready),
-            If(source.valid & source.ready,
+            fifo.source.ack.eq(source.ack),
+            If(source.stb & source.ack,
                 counter_ce.eq(1),
-                If(source.last,
+                If(source.eop,
                     NextState("IDLE")
                 )
             )
@@ -513,9 +513,9 @@ class EtherboneRecordSender(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            pbuffer.source.ready.eq(1),
-            If(pbuffer.source.valid,
-                pbuffer.source.ready.eq(0),
+            pbuffer.source.ack.eq(1),
+            If(pbuffer.source.stb,
+                pbuffer.source.ack.eq(0),
                 NextState("SEND_BASE_ADDRESS")
             )
         )
@@ -529,20 +529,20 @@ class EtherboneRecordSender(Module):
         ]
 
         fsm.act("SEND_BASE_ADDRESS",
-            source.valid.eq(pbuffer.source.valid),
-            source.last.eq(0),
+            source.stb.eq(pbuffer.source.stb),
+            source.eop.eq(0),
             source.data.eq(pbuffer.source.base_addr),
-            If(source.ready,
+            If(source.ack,
                 NextState("SEND_DATA")
             )
         )
         fsm.act("SEND_DATA",
-            source.valid.eq(pbuffer.source.valid),
-            source.last.eq(pbuffer.source.last),
+            source.stb.eq(pbuffer.source.stb),
+            source.eop.eq(pbuffer.source.eop),
             source.data.eq(pbuffer.source.data),
-            If(source.valid & source.ready,
-                pbuffer.source.ready.eq(1),
-                If(source.last,
+            If(source.stb & source.ack,
+                pbuffer.source.ack.eq(1),
+                If(source.eop,
                     NextState("IDLE")
                 )
             )
@@ -597,9 +597,9 @@ class EtherboneWishboneMaster(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ready.eq(1),
-            If(sink.valid,
-                sink.ready.eq(0),
+            sink.ack.eq(1),
+            If(sink.stb,
+                sink.ack.eq(0),
                 If(sink.we,
                     NextState("WRITE_DATA")
                 ).Else(
@@ -611,12 +611,12 @@ class EtherboneWishboneMaster(Module):
             bus.adr.eq(sink.addr),
             bus.dat_w.eq(sink.data),
             bus.sel.eq(sink.be),
-            bus.stb.eq(sink.valid),
+            bus.stb.eq(sink.stb),
             bus.we.eq(1),
             bus.cyc.eq(1),
             If(bus.stb & bus.ack,
-                sink.ready.eq(1),
-                If(sink.last,
+                sink.ack.eq(1),
+                If(sink.eop,
                     NextState("IDLE")
                 )
             )
@@ -624,7 +624,7 @@ class EtherboneWishboneMaster(Module):
         fsm.act("READ_DATA",
             bus.adr.eq(sink.addr),
             bus.sel.eq(sink.be),
-            bus.stb.eq(sink.valid),
+            bus.stb.eq(sink.stb),
             bus.cyc.eq(1),
             If(bus.stb & bus.ack,
                 data_update.eq(1),
@@ -632,17 +632,17 @@ class EtherboneWishboneMaster(Module):
             )
         )
         fsm.act("SEND_DATA",
-            source.valid.eq(sink.valid),
-            source.last.eq(sink.last),
+            source.stb.eq(sink.stb),
+            source.eop.eq(sink.eop),
             source.base_addr.eq(sink.base_addr),
             source.addr.eq(sink.addr),
             source.count.eq(sink.count),
             source.be.eq(sink.be),
             source.we.eq(1),
             source.data.eq(data),
-            If(source.valid & source.ready,
-                sink.ready.eq(1),
-                If(source.last,
+            If(source.stb & source.ack,
+                sink.ack.eq(1),
+                If(source.eop,
                     NextState("IDLE")
                 ).Else(
                     NextState("READ_DATA")
@@ -661,7 +661,7 @@ class EtherboneWishboneSlave(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ready.eq(1),
+            sink.ack.eq(1),
             If(bus.stb & bus.cyc,
                 If(bus.we,
                     NextState("SEND_WRITE")
@@ -671,33 +671,33 @@ class EtherboneWishboneSlave(Module):
             )
         )
         fsm.act("SEND_WRITE",
-            source.valid.eq(1),
-            source.last.eq(1),
+            source.stb.eq(1),
+            source.eop.eq(1),
             source.base_addr[2:].eq(bus.adr),
             source.count.eq(1),
             source.be.eq(bus.sel),
             source.we.eq(1),
             source.data.eq(bus.dat_w),
-            If(source.valid & source.ready,
+            If(source.stb & source.ack,
                 bus.ack.eq(1),
                 NextState("IDLE")
             )
         )
         fsm.act("SEND_READ",
-            source.valid.eq(1),
-            source.last.eq(1),
+            source.stb.eq(1),
+            source.eop.eq(1),
             source.base_addr.eq(0),
             source.count.eq(1),
             source.be.eq(bus.sel),
             source.we.eq(0),
             source.data[2:].eq(bus.adr),
-            If(source.valid & source.ready,
+            If(source.stb & source.ack,
                 NextState("WAIT_READ")
             )
         )
         fsm.act("WAIT_READ",
-            sink.ready.eq(1),
-            If(sink.valid & sink.we,
+            sink.ack.eq(1),
+            If(sink.stb & sink.we,
                 bus.ack.eq(1),
                 bus.dat_r.eq(sink.data),
                 NextState("IDLE")
