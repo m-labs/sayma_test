@@ -745,6 +745,7 @@ class MasterInit(Module):
 
 class SlaveInit(Module, AutoCSR):
     def __init__(self, serdes, sync_pattern, taps):
+        self.reset = Signal()
         self.ready = Signal()
         self.error = Signal()
 
@@ -760,9 +761,9 @@ class SlaveInit(Module, AutoCSR):
         timer = WaitTimer(1024)
         self.submodules += timer
 
-        self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
-        self.comb += self.fsm.reset.eq(serdes.rx_pattern == 0)
+        self.comb += self.reset.eq(serdes.rx_pattern == 0)
 
+        self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
         fsm.act("IDLE",
             NextValue(delay, 0),
             NextValue(delay_min, 0),
@@ -866,6 +867,35 @@ class SlaveInit(Module, AutoCSR):
         )
 
 
+class Control(Module, AutoCSR):
+    def __init__(self, init, mode="master"):
+        if mode == "master":
+            self.reset = CSR()
+        self.ready = CSRStatus()
+        self.error = CSRStatus()
+
+        self.delay = CSRStatus(9)
+        self.delay_min_found = CSRStatus()
+        self.delay_min = CSRStatus(9)
+        self.delay_max_found = CSRStatus()
+        self.delay_max = CSRStatus(9)
+        self.bitslip = CSRStatus(6)
+
+        # # #
+
+        if mode == "master":
+            self.comb += init.reset.eq(self.reset.re)
+        self.comb += [
+            self.ready.status.eq(init.ready),
+            self.error.status.eq(init.error),
+            self.delay.status.eq(init.delay),
+            self.delay_min_found.status.eq(init.delay_min_found),
+            self.delay_min.status.eq(init.delay_min),
+            self.delay_max_found.status.eq(init.delay_max_found),
+            self.delay_max.status.eq(init.delay_max),
+            self.bitslip.status.eq(init.bitslip)
+        ]
+
 # amc specific
 
 class AMCMasterPLL(SerdesPLL):
@@ -880,6 +910,10 @@ class AMCMasterInit(MasterInit):
     def __init__(self, serdes):
         MasterInit.__init__(self, serdes, sync_pattern=0x123456789a, taps=512)
 
+class AMCMasterControl(Control):
+    def __init__(self, init):
+        Control.__init__(self, init, mode="master")
+
 # rtm specific
 
 class RTMSlavePLL(SerdesPLL):
@@ -893,3 +927,7 @@ class RTMSlaveSerdes(Series7Serdes):
 class RTMSlaveInit(SlaveInit):
     def __init__(self, serdes):
         SlaveInit.__init__(self, serdes, sync_pattern=0x123456789a, taps=32)
+
+class RTMSlaveControl(Control):
+    def __init__(self, init):
+        Control.__init__(self, init, mode="slave")

@@ -60,15 +60,27 @@ def analyzer():
 
 
 if len(sys.argv) < 2:
-    print("missing test (analyzer)")
+    print("missing test (init, wishbone, analyzer)")
     wb.close()
     exit()
-if sys.argv[1] == "analyzer":
-    analyzer()
+
+if sys.argv[1] == "init":
+    wb.regs.amc_rtm_link_control_reset.write(1)
+    while not (wb.regs.amc_rtm_link_control_ready.read() & 0x1):
+        time.sleep(0.1)
+    print("delay_min_found: {:d}".format(wb.regs.amc_rtm_link_control_delay_min_found.read()))
+    print("delay_min: {:d}".format(wb.regs.amc_rtm_link_control_delay_min.read()))
+    print("delay_max_found: {:d}".format(wb.regs.amc_rtm_link_control_delay_max_found.read()))
+    print("delay_max: {:d}".format(wb.regs.amc_rtm_link_control_delay_max.read()))
+    print("delay: {:d}".format(wb.regs.amc_rtm_link_control_delay.read()))
+    print("bitslip: {:d}".format(wb.regs.amc_rtm_link_control_bitslip.read()))
+    print("ready: {:d}".format(wb.regs.amc_rtm_link_control_ready.read()))
 elif sys.argv[1] == "wishbone":
     write_pattern(32)
     errors = check_pattern(32, debug=True)
     print("errors: {:d}".format(errors))
+elif sys.argv[1] == "analyzer":
+    analyzer()
 else:
     raise ValueError
 

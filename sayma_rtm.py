@@ -16,7 +16,7 @@ from litex.soc.cores.spi import SPIMaster
 from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
-from amc_rtm_link.phy import RTMSlavePLL, RTMSlaveSerdes, RTMSlaveInit
+from amc_rtm_link.phy import RTMSlavePLL, RTMSlaveSerdes, RTMSlaveInit, RTMSlaveControl
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
 
@@ -74,6 +74,7 @@ class _CRG(Module):
         self.clock_domains.cd_clk200 = ClockDomain()
 
         clk50 = platform.request("clk50")
+        self.reset = Signal()
 
         pll_locked = Signal()
         pll_fb = Signal()
@@ -96,8 +97,8 @@ class _CRG(Module):
             ),
             Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
             Instance("BUFG", i_I=pll_clk200, o_O=self.cd_clk200.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~pll_locked),
-            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked),
+            AsyncResetSynchronizer(self.cd_sys, ~pll_locked | self.reset),
+            AsyncResetSynchronizer(self.cd_clk200, ~pll_locked | self.reset)
         ]
 
         reset_counter = Signal(4, reset=15)
@@ -146,8 +147,8 @@ class JESDTestSoC(SoCCore):
 
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "amc_rtm_link_init": 20,
-        "analyzer":          30
+        "amc_rtm_link_control": 20,
+        "analyzer":             30
     }
     csr_map.update(SoCCore.csr_map)
 
@@ -184,6 +185,8 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
         amc_rtm_link_init = RTMSlaveInit(amc_rtm_link_serdes)
         self.submodules.amc_rtm_link_init = amc_rtm_link_init
+        self.submodules.amc_rtm_link_control = RTMSlaveControl(amc_rtm_link_init)
+        self.comb += self.crg.reset.eq(amc_rtm_link_init.reset)
 
         amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
         amc_rtm_link_serdes.cd_serdes_20x.clk.attr.add("keep")

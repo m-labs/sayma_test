@@ -28,7 +28,7 @@ from litejesd204b.core import LiteJESD204BCoreTXControl
 
 from drtio.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
 
-from amc_rtm_link.phy import AMCMasterPLL, AMCMasterSerdes, AMCMasterInit
+from amc_rtm_link.phy import AMCMasterPLL, AMCMasterSerdes, AMCMasterInit, AMCMasterControl
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
 
@@ -560,8 +560,8 @@ class DRTIOTestSoC(SoCCore):
 
 class AMCRTMLinkTestSoC(SoCCore):
     csr_map = {
-        "amc_rtm_link_init": 20,
-        "analyzer":          30
+        "amc_rtm_link_control": 20,
+        "analyzer":             30
     }
     csr_map.update(SoCCore.csr_map)
 
@@ -606,6 +606,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
         amc_rtm_link_init = AMCMasterInit(amc_rtm_link_serdes)
         self.submodules.amc_rtm_link_init = amc_rtm_link_init
+        self.submodules.amc_rtm_link_control = AMCMasterControl(amc_rtm_link_init)
 
         amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
         amc_rtm_link_serdes.cd_serdes_20x.clk.attr.add("keep")
