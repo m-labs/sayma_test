@@ -1,2 +1,11 @@
 - test spi jesd configuration with amc through amc rtm link (need m-labs support to generate csr for rtm in amc header?)
 - test jesd with amc/rtm/wishbone bridge.
+
+- split phy.py
+- remove specific AMC/RTM classes.
+- remove crossbar
+- use 8b10b commas instead of specific synchronization pattern
+- add scrambling (recycle code from drtio)
+- in _remove_from_layout, would it be possible to use the filter() python function?
+- check "if endianness is "big""
+- try to remove reverse_bytes
