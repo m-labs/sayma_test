@@ -22,8 +22,8 @@ groups = {
 
 def analyzer():
     analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
-    analyzer.configure_group(groups["wishbone"])
-    analyzer.configure_trigger(cond={"wishbone_access" : 1})
+    analyzer.configure_group(groups["serdes"])
+    analyzer.configure_trigger(cond={"wishbone_access": 1})
     analyzer.run(offset=32, length=128)
     analyzer.wait_done()
     analyzer.upload()

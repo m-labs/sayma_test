@@ -88,17 +88,23 @@ class SerdesPLL(Module):
     def __init__(self, refclk_freq, linerate, vco_div=1):
         assert refclk_freq == 125e6
         assert linerate == 1.25e9
+
         self.lock = Signal()
         self.refclk = Signal()
         self.serdes_clk = Signal()
         self.serdes_20x_clk = Signal()
         self.serdes_5x_clk = Signal()
 
-        # refclk: 125MHz
-        # pll vco: 1250MHz
-        # serdes: 31.25MHz
-        # serdes_20x = 625MHz
-        # serdes_5x = 156.25MHz
+        # # #
+
+        #----------------------
+        # refclk:        125MHz
+        # vco:          1250MHz
+        #----------------------
+        # serdes:      31.25MHz
+        # serdes_20x:    625MHz
+        # serdes_5x:  156.25MHz
+        #----------------------
         self.linerate = linerate
 
         pll_locked = Signal()
@@ -132,7 +138,7 @@ class SerdesPLL(Module):
             Instance("BUFG", i_I=pll_serdes_20x_clk, o_O=self.serdes_20x_clk),
             Instance("BUFG", i_I=pll_serdes_5x_clk, o_O=self.serdes_5x_clk)
         ]
-        self.comb += self.lock.eq(pll_locked)
+        self.specials += MultiReg(pll_locked, self.lock)
 
 
 class Series7Serdes(Module):
@@ -175,27 +181,22 @@ class Series7Serdes(Module):
         # control/status cdc
         tx_pattern = Signal(40)
         tx_pattern_en = Signal()
-
         rx_pattern = Signal(40)
-
         rx_bitslip_value = Signal(6)
-
         self.specials += [
             MultiReg(self.tx_pattern, tx_pattern, "serdes"),
-            MultiReg(self.tx_pattern_en, tx_pattern_en, "serdes")
+            MultiReg(self.tx_pattern_en, tx_pattern_en, "serdes"),
+            MultiReg(rx_pattern, self.rx_pattern, "sys")
         ]
-
-        self.specials += [
-            MultiReg(rx_pattern, self.rx_pattern, "sys"),
-        ]
-
         self.specials += MultiReg(self.rx_bitslip_value, rx_bitslip_value, "serdes"),
 
         # tx clock (linerate/10)
         if mode == "master":
             self.submodules.tx_clk_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
-            self.comb += self.tx_clk_gearbox.i.eq(0b1111100000111110000011111000001111100000)
-
+            self.comb += self.tx_clk_gearbox.i.eq((0b1111100000 << 30) |
+                                                  (0b1111100000 << 20) |
+                                                  (0b1111100000 << 10) |
+                                                  (0b1111100000 <<  0))
             clk_o = Signal()
             self.specials += [
                 Instance("OSERDESE2",
@@ -221,13 +222,12 @@ class Series7Serdes(Module):
 
         # tx data
         self.submodules.tx_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
-        self.sync.serdes += [
+        self.sync.serdes += \
             If(tx_pattern_en,
                 self.tx_gearbox.i.eq(tx_pattern)
             ).Else(
                 self.tx_gearbox.i.eq(Cat(*[self.encoder.output[i] for i in range(4)]))
             )
-        ]
 
         serdes_o = Signal()
         self.specials += [
@@ -256,7 +256,6 @@ class Series7Serdes(Module):
         use_bufr = True
         if mode == "slave":
             clk_i = Signal()
-
             clk_i_bufg = Signal()
             self.specials += [
                 Instance("IBUFDS",
@@ -269,13 +268,13 @@ class Series7Serdes(Module):
                 clk_i_bufr = Signal()
                 self.specials += [
                     Instance("BUFR", i_I=clk_i, o_O=clk_i_bufr),
-                    Instance("BUFG", i_I=clk_i_bufr, o_O=clk_i_bufg),
+                    Instance("BUFG", i_I=clk_i_bufr, o_O=clk_i_bufg)
                 ]
             else:
-                self.specials += Instance("BUFG", i_I=clk_i, o_O=clk_i_bufg),
+                self.specials += Instance("BUFG", i_I=clk_i, o_O=clk_i_bufg)
             self.comb += pll.refclk.eq(clk_i_bufg)
 
-        # rx
+        # rx data
         self.submodules.rx_gearbox = Gearbox(8, "serdes_5x", 40, "serdes")
         self.submodules.rx_bitslip = ClockDomainsRenamer("serdes")(BitSlip(40))
 
@@ -289,7 +288,7 @@ class Series7Serdes(Module):
                 i_I=pads.rx_p,
                 i_IB=pads.rx_n,
                 o_O=serdes_m_i_nodelay,
-                o_OB=serdes_s_i_nodelay,
+                o_OB=serdes_s_i_nodelay
             )
         ]
 
@@ -324,7 +323,7 @@ class Series7Serdes(Module):
                 o_Q6=serdes_m_q[2], o_Q5=serdes_m_q[3],
                 o_Q4=serdes_m_q[4], o_Q3=serdes_m_q[5],
                 o_Q2=serdes_m_q[6], o_Q1=serdes_m_q[7]
-            ),
+            )
         ]
         self.comb += self.phase_detector.mdata.eq(serdes_m_q)
 
@@ -361,11 +360,10 @@ class Series7Serdes(Module):
                 o_Q6=serdes_s_q[2], o_Q5=serdes_s_q[3],
                 o_Q4=serdes_s_q[4], o_Q3=serdes_s_q[5],
                 o_Q2=serdes_s_q[6], o_Q1=serdes_s_q[7]
-            ),
+            )
         ]
         self.comb += self.phase_detector.sdata.eq(~serdes_s_q)
 
-        # rx data
         self.comb += [
             self.rx_gearbox.i.eq(serdes_m_q),
             self.rx_bitslip.value.eq(rx_bitslip_value),
@@ -374,7 +372,7 @@ class Series7Serdes(Module):
             self.decoders[1].input.eq(self.rx_bitslip.o[10:20]),
             self.decoders[2].input.eq(self.rx_bitslip.o[20:30]),
             self.decoders[3].input.eq(self.rx_bitslip.o[30:40]),
-            rx_pattern.eq(self.rx_bitslip.o),
+            rx_pattern.eq(self.rx_bitslip.o)
         ]
 
 
@@ -419,23 +417,16 @@ class UltrascaleSerdes(Module):
         # control/status cdc
         tx_pattern = Signal(40)
         tx_pattern_en = Signal()
-
         rx_pattern = Signal(40)
-
         rx_bitslip_value = Signal(6)
         rx_delay_rst = Signal()
         rx_delay_inc = Signal()
         rx_delay_en_vtc = Signal()
         rx_delay_ce = Signal()
-
         self.specials += [
             MultiReg(self.tx_pattern, tx_pattern, "serdes"),
-            MultiReg(self.tx_pattern_en, tx_pattern_en, "serdes")
-        ]
-
-        self.specials += MultiReg(rx_pattern, self.rx_pattern, "sys")
-
-        self.specials += [
+            MultiReg(self.tx_pattern_en, tx_pattern_en, "serdes"),
+            MultiReg(rx_pattern, self.rx_pattern, "sys"),
             MultiReg(self.rx_bitslip_value, rx_bitslip_value, "serdes"),
             MultiReg(self.rx_delay_inc, rx_delay_inc, "serdes_5x"),
             MultiReg(self.rx_delay_en_vtc, rx_delay_en_vtc, "serdes_5x")
@@ -454,8 +445,10 @@ class UltrascaleSerdes(Module):
         # tx clock (linerate/10)
         if mode == "master":
             self.submodules.tx_clk_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
-            self.comb += self.tx_clk_gearbox.i.eq(0b1111100000111110000011111000001111100000)
-
+            self.comb += self.tx_clk_gearbox.i.eq((0b1111100000 << 30) |
+                                                  (0b1111100000 << 20) |
+                                                  (0b1111100000 << 10) |
+                                                  (0b1111100000 <<  0))
             clk_o = Signal()
             self.specials += [
                 Instance("OSERDESE3",
@@ -505,7 +498,6 @@ class UltrascaleSerdes(Module):
         use_bufr = True
         if mode == "slave":
             clk_i = Signal()
-
             clk_i_bufg = Signal()
             self.specials += [
                 Instance("IBUFDS",
@@ -609,17 +601,16 @@ class UltrascaleSerdes(Module):
             self.decoders[0].input.eq(self.rx_bitslip.o[0:10]),
             self.decoders[1].input.eq(self.rx_bitslip.o[10:20]),
             self.decoders[2].input.eq(self.rx_bitslip.o[20:30]),
-            self.decoders[3].input.eq(self.rx_bitslip.o[30:40]),            
+            self.decoders[3].input.eq(self.rx_bitslip.o[30:40]),
             rx_pattern.eq(self.rx_bitslip.o)
         ]
 
 
-class MasterInit(Module, AutoCSR):
+class MasterInit(Module):
     def __init__(self, serdes, sync_pattern, taps):
-        self.reset = CSRStorage()
+        self.reset = Signal()
         self.error = Signal()
         self.ready = Signal()
-        self.debug = Signal(8)
 
         # # #
 
@@ -634,10 +625,9 @@ class MasterInit(Module, AutoCSR):
         self.submodules += timer
 
         self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
-        self.comb += self.fsm.reset.eq(self.reset.storage)
+        self.comb += self.fsm.reset.eq(self.reset)
 
         fsm.act("IDLE",
-            self.debug.eq(0),
             NextValue(delay, 0),
             NextValue(delay_min, 0),
             NextValue(delay_min_found, 0),
@@ -649,7 +639,6 @@ class MasterInit(Module, AutoCSR):
             serdes.tx_pattern_en.eq(1)
         )
         fsm.act("RESET_SLAVE",
-            self.debug.eq(1),
             timer.wait.eq(1),
             If(timer.done,
                 timer.wait.eq(0),
@@ -658,7 +647,6 @@ class MasterInit(Module, AutoCSR):
             serdes.tx_pattern_en.eq(1)
         )
         fsm.act("SEND_PATTERN",
-            self.debug.eq(2),
             If(serdes.rx_pattern != 0,
                 NextState("WAIT_STABLE")
             ),
@@ -666,7 +654,6 @@ class MasterInit(Module, AutoCSR):
             serdes.tx_pattern.eq(sync_pattern)
         )
         fsm.act("WAIT_STABLE",
-            self.debug.eq(3),
             timer.wait.eq(1),
             If(timer.done,
                 timer.wait.eq(0),
@@ -676,7 +663,6 @@ class MasterInit(Module, AutoCSR):
             serdes.tx_pattern.eq(sync_pattern)
         )
         fsm.act("CHECK_PATTERN",
-            self.debug.eq(4),
             If(~delay_min_found,
                 If(serdes.rx_pattern == sync_pattern,
                     timer.wait.eq(1),
@@ -701,7 +687,6 @@ class MasterInit(Module, AutoCSR):
         )
         self.comb += serdes.rx_bitslip_value.eq(bitslip)
         fsm.act("INC_DELAY_BITSLIP",
-            self.debug.eq(5),
             NextState("WAIT_STABLE"),
             If(delay == (taps - 1),
                 If(delay_min_found,
@@ -723,7 +708,6 @@ class MasterInit(Module, AutoCSR):
             serdes.tx_pattern.eq(sync_pattern)
         )
         fsm.act("RESET_SAMPLING_WINDOW",
-            self.debug.eq(6),
             NextValue(delay, 0),
             serdes.rx_delay_rst.eq(1),
             NextState("WAIT_SAMPLING_WINDOW"),
@@ -731,20 +715,18 @@ class MasterInit(Module, AutoCSR):
             serdes.tx_pattern.eq(sync_pattern)
         )
         fsm.act("CONFIGURE_SAMPLING_WINDOW",
-            self.debug.eq(7),
             If(delay == (delay_min + (delay_max - delay_min)[1:]),
                 NextState("READY")
             ).Else(
                 NextValue(delay, delay + 1),
                 serdes.rx_delay_inc.eq(1),
                 serdes.rx_delay_ce.eq(1),
-                NextState("WAIT_SAMPLING_WINDOW"),
+                NextState("WAIT_SAMPLING_WINDOW")
             ),
             serdes.tx_pattern_en.eq(1),
             serdes.tx_pattern.eq(sync_pattern)
         )
         fsm.act("WAIT_SAMPLING_WINDOW",
-            self.debug.eq(8),
             timer.wait.eq(1),
             If(timer.done,
                 timer.wait.eq(0),
@@ -754,11 +736,9 @@ class MasterInit(Module, AutoCSR):
             serdes.tx_pattern.eq(sync_pattern)
         )
         fsm.act("READY",
-            self.debug.eq(9),
             self.ready.eq(1)
         )
         fsm.act("ERROR",
-            self.debug.eq(10),
             self.error.eq(1)
         )
 
@@ -767,7 +747,6 @@ class SlaveInit(Module, AutoCSR):
     def __init__(self, serdes, sync_pattern, taps):
         self.ready = Signal()
         self.error = Signal()
-        self.debug = Signal(8)
 
         # # #
 
@@ -785,7 +764,6 @@ class SlaveInit(Module, AutoCSR):
         self.comb += self.fsm.reset.eq(serdes.rx_pattern == 0)
 
         fsm.act("IDLE",
-            self.debug.eq(0),
             NextValue(delay, 0),
             NextValue(delay_min, 0),
             NextValue(delay_min_found, 0),
@@ -797,7 +775,6 @@ class SlaveInit(Module, AutoCSR):
             serdes.tx_pattern_en.eq(1)
         )
         fsm.act("WAIT_STABLE",
-            self.debug.eq(1),
             timer.wait.eq(1),
             If(timer.done,
                 timer.wait.eq(0),
@@ -806,7 +783,6 @@ class SlaveInit(Module, AutoCSR):
             serdes.tx_pattern_en.eq(1)
         )
         fsm.act("CHECK_PATTERN",
-            self.debug.eq(3),
             If(~delay_min_found,
                 If(serdes.rx_pattern == sync_pattern,
                     timer.wait.eq(1),
@@ -831,7 +807,6 @@ class SlaveInit(Module, AutoCSR):
         )
         self.comb += serdes.rx_bitslip_value.eq(bitslip)
         fsm.act("INC_DELAY_BITSLIP",
-            self.debug.eq(4),
             NextState("WAIT_STABLE"),
             If(delay == (taps - 1),
                 If(delay_min_found,
@@ -852,13 +827,11 @@ class SlaveInit(Module, AutoCSR):
             serdes.tx_pattern_en.eq(1)
         )
         fsm.act("RESET_SAMPLING_WINDOW",
-            self.debug.eq(5),
             NextValue(delay, 0),
             serdes.rx_delay_rst.eq(1),
             NextState("WAIT_SAMPLING_WINDOW")
         )
         fsm.act("CONFIGURE_SAMPLING_WINDOW",
-            self.debug.eq(6),
             If(delay == (delay_min + (delay_max - delay_min)[1:]),
                 NextState("SEND_PATTERN")
             ).Else(
@@ -869,30 +842,26 @@ class SlaveInit(Module, AutoCSR):
             )
         )
         fsm.act("WAIT_SAMPLING_WINDOW",
-            self.debug.eq(7),
             timer.wait.eq(1),
             If(timer.done,
                 timer.wait.eq(0),
                 NextState("CONFIGURE_SAMPLING_WINDOW")
-            ),
+            )
         )
         fsm.act("SEND_PATTERN",
-            self.debug.eq(8),
             timer.wait.eq(1),
             If(timer.done,
                 If(serdes.rx_pattern != sync_pattern,
                     NextState("READY")
-                ),
+                )
             ),
             serdes.tx_pattern_en.eq(1),
             serdes.tx_pattern.eq(sync_pattern)
         )
         fsm.act("READY",
-            self.debug.eq(9),
             self.ready.eq(1)
         )
         fsm.act("ERROR",
-            self.debug.eq(10),
             self.error.eq(1)
         )
 
