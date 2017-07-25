@@ -174,7 +174,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.add_wb_master(amc_rtm_link_etherbone.wishbone.bus)
 
         # wishbone test memory
-        self.submodules.amc_rtm_link_sram = wishbone.SRAM(8192)
+        self.submodules.amc_rtm_link_sram = wishbone.SRAM(8192, init=[i for i in range(8192//4)])
         self.register_mem("amc_rtm_link_sram", self.mem_map["amc_rtm_link"], self.amc_rtm_link_sram.bus, 8192)
 
 
