@@ -16,7 +16,8 @@ from litex.soc.cores.spi import SPIMaster
 from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
-from amc_rtm_link.phy import SerdesPLL, Series7Serdes, SlaveInit, Control
+from amc_rtm_link.s7phy import S7SerdesPLL, S7Serdes
+from amc_rtm_link.phy import SerdesSlaveInit, SerdesControl
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
 
@@ -177,15 +178,15 @@ class AMCRTMLinkTestSoC(SoCCore):
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
         # amc rtm link
-        amc_rtm_link_pll = SerdesPLL(125e6, 1.25e9, vco_div=1)
+        amc_rtm_link_pll = S7SerdesPLL(125e6, 1.25e9, vco_div=1)
         self.submodules += amc_rtm_link_pll
 
         amc_rtm_link_pads = platform.request("amc_rtm_link")
-        amc_rtm_link_serdes = Series7Serdes(amc_rtm_link_pll, amc_rtm_link_pads, mode="slave")
+        amc_rtm_link_serdes = S7Serdes(amc_rtm_link_pll, amc_rtm_link_pads, mode="slave")
         self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
-        amc_rtm_link_init =  SlaveInit(amc_rtm_link_serdes, sync_pattern=0x123456789a, taps=32)
+        amc_rtm_link_init =  SerdesSlaveInit(amc_rtm_link_serdes, sync_pattern=0x123456789a, taps=32)
         self.submodules.amc_rtm_link_init = amc_rtm_link_init
-        self.submodules.amc_rtm_link_control = Control(amc_rtm_link_init, mode="slave")
+        self.submodules.amc_rtm_link_control = SerdesControl(amc_rtm_link_init, mode="slave")
         self.comb += self.crg.reset.eq(amc_rtm_link_init.reset)
 
         amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
