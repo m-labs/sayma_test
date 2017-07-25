@@ -1,8 +1,8 @@
-from litex.gen import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from litex.soc.interconnect.csr import *
-from litex.soc.cores.code_8b10b import Encoder, Decoder
+from misoc.interconnect.csr import *
+from misoc.cores.code_8b10b import Encoder, Decoder
 
 from drtio.gth_ultrascale_init import GTHInit
 from drtio.clock_aligner import BruteforceClockAligner

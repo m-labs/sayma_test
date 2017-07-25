@@ -2,8 +2,8 @@ from math import ceil
 from functools import reduce
 from operator import add
 
-from litex.gen import *
-from litex.gen.genlib.cdc import MultiReg, PulseSynchronizer
+from migen import *
+from migen.genlib.cdc import MultiReg, PulseSynchronizer
 
 
 # Changes the phase of the transceiver RX clock to align the comma to

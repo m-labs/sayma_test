@@ -1,8 +1,8 @@
 import os
 import struct
 
-from litex.gen import *
-from litex.soc.interconnect import wishbone
+from migen import *
+from misoc.interconnect import wishbone
 
 
 class FirmwareROM(wishbone.SRAM):

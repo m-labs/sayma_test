@@ -2,18 +2,18 @@
 import sys
 sys.path.append("gateware") # FIXME
 
-from litex.gen import *
-from litex.soc.interconnect.csr import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen import *
+from misoc.interconnect.csr import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from litex.build.generic_platform import *
-from litex.build.xilinx import XilinxPlatform
+from migen.build.generic_platform import *
+from migen.build.xilinx import XilinxPlatform
 
-from litex.soc.integration.soc_core import *
-from litex.soc.integration.soc_sdram import *
-from litex.soc.integration.builder import *
-from litex.soc.cores.uart import UARTWishboneBridge
-from litex.soc.interconnect import stream
+from misoc.integration.soc_core import *
+from misoc.integration.soc_sdram import *
+from misoc.integration.builder import *
+from misoc.cores.uart import UARTWishboneBridge
+from misoc.interconnect import stream
 
 from litedram.modules import MT41J256M16
 from litedram.phy import kusddrphy

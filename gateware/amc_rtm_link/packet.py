@@ -1,11 +1,11 @@
 from math import ceil
 from collections import OrderedDict
 
-from litex.gen import *
-from litex.gen.genlib.misc import WaitTimer
+from migen import *
+from migen.genlib.misc import WaitTimer
 
-from litex.soc.interconnect import stream
-from litex.soc.interconnect.stream import EndpointDescription
+from misoc.interconnect import stream
+from misoc.interconnect.stream import EndpointDescription
 
 
 def reverse_bytes(signal):

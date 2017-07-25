@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from litex.soc.tools.remote import RemoteClient
+from misoc.tools.remote import RemoteClient
 
 wb = RemoteClient(port=1234, debug=False)
 wb.open()

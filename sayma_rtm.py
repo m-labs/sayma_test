@@ -2,19 +2,19 @@
 import sys
 sys.path.append("gateware") # FIXME
 
-from litex.gen import *
-from litex.soc.interconnect.csr import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen import *
+from misoc.interconnect.csr import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from litex.build.generic_platform import *
-from litex.build.xilinx import XilinxPlatform
+from migen.build.generic_platform import *
+from migen.build.xilinx import XilinxPlatform
 
-from litex.soc.integration.soc_core import *
-from litex.soc.integration.builder import *
-from litex.soc.cores.uart import UARTWishboneBridge
-from litex.soc.cores.spi import SPIMaster
-from litex.soc.interconnect import stream
-from litex.soc.interconnect import wishbone
+from misoc.integration.soc_core import *
+from misoc.integration.builder import *
+from misoc.cores.uart import UARTWishboneBridge
+from misoc.cores.spi import SPIMaster
+from misoc.interconnect import stream
+from misoc.interconnect import wishbone
 
 from amc_rtm_link.phy import RTMSlavePLL, RTMSlaveSerdes, RTMSlaveInit, RTMSlaveControl
 from amc_rtm_link import packet

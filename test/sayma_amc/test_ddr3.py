@@ -3,7 +3,7 @@
 import sys
 import time
 
-from litex.soc.tools.remote import RemoteClient
+from misoc.tools.remote import RemoteClient
 
 from litescope.software.driver.analyzer import LiteScopeAnalyzerDriver
 

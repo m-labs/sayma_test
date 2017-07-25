@@ -1,10 +1,10 @@
-from litex.gen import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
-from litex.gen.genlib.cdc import MultiReg, PulseSynchronizer, Gearbox
-from litex.gen.genlib.misc import BitSlip, WaitTimer
+from migen import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.cdc import MultiReg, PulseSynchronizer, Gearbox
+from migen.genlib.misc import BitSlip, WaitTimer
 
-from litex.soc.interconnect.csr import *
-from litex.soc.cores.code_8b10b import Encoder, Decoder
+from misoc.interconnect.csr import *
+from misoc.cores.code_8b10b import Encoder, Decoder
 
 # generic
 

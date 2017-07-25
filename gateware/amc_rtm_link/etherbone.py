@@ -14,10 +14,10 @@ TODO:
 - use cyc field
 """
 
-from litex.gen import *
+from migen import *
 
-from litex.soc.interconnect import stream
-from litex.soc.interconnect import wishbone
+from misoc.interconnect import stream
+from misoc.interconnect import wishbone
 
 from amc_rtm_link.packet import *
 
