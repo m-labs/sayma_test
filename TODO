@@ -2,7 +2,6 @@
 - test jesd with amc/rtm/wishbone bridge.
 
 - split phy.py
-- remove specific AMC/RTM classes.
 - remove crossbar
 - use 8b10b commas instead of specific synchronization pattern
 - add scrambling (recycle code from drtio)
