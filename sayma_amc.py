@@ -17,7 +17,8 @@ from misoc.interconnect import stream
 
 from drtio.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
 
-from amc_rtm_link.phy import AMCMasterPLL, AMCMasterSerdes, AMCMasterInit, AMCMasterControl
+from amc_rtm_link.kusphy import KUSSerdesPLL, KUSSerdes
+from amc_rtm_link.phy import SerdesMasterInit, SerdesControl
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
 
@@ -341,16 +342,16 @@ class AMCRTMLinkTestSoC(SoCCore):
         ]
 
         # amc rtm link
-        amc_rtm_link_pll = AMCMasterPLL()
+        amc_rtm_link_pll = KUSSerdesPLL(125e6, 1.25e9, vco_div=2)
         self.comb += amc_rtm_link_pll.refclk.eq(ClockSignal())
         self.submodules += amc_rtm_link_pll
 
         amc_rtm_link_pads = platform.request("amc_rtm_link")
-        amc_rtm_link_serdes = AMCMasterSerdes(amc_rtm_link_pll, amc_rtm_link_pads)
+        amc_rtm_link_serdes = KUSSerdes(amc_rtm_link_pll, amc_rtm_link_pads, mode="master")
         self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
-        amc_rtm_link_init = AMCMasterInit(amc_rtm_link_serdes)
+        amc_rtm_link_init = SerdesMasterInit(amc_rtm_link_serdes, taps=512)
         self.submodules.amc_rtm_link_init = amc_rtm_link_init
-        self.submodules.amc_rtm_link_control = AMCMasterControl(amc_rtm_link_init)
+        self.submodules.amc_rtm_link_control = SerdesControl(amc_rtm_link_init, mode="master")
 
         amc_rtm_link_serdes.cd_serdes.clk.attr.add("keep")
         amc_rtm_link_serdes.cd_serdes_20x.clk.attr.add("keep")
@@ -360,13 +361,16 @@ class AMCRTMLinkTestSoC(SoCCore):
         platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            amc_rtm_link_serdes.cd_serdes.clk)
+            amc_rtm_link_serdes.cd_serdes.clk,
+            amc_rtm_link_serdes.cd_serdes_5x.clk)
+
 
         # wishbone slave
-        amc_rtm_link_core = packet.Core(clk_freq)
-        amc_rtm_link_port = amc_rtm_link_core.crossbar.get_port(0x01)
+        amc_rtm_link_depacketizer = packet.Depacketizer(clk_freq)
+        amc_rtm_link_packetizer = packet.Packetizer()
+        self.submodules += amc_rtm_link_depacketizer, amc_rtm_link_packetizer
         amc_rtm_link_etherbone = etherbone.Etherbone(mode="slave")
-        self.submodules += amc_rtm_link_core, amc_rtm_link_etherbone
+        self.submodules += amc_rtm_link_etherbone
         amc_rtm_link_tx_cdc = stream.AsyncFIFO([("data", 32)], 8)
         amc_rtm_link_tx_cdc = ClockDomainsRenamer({"write": "sys", "read": "serdes"})(amc_rtm_link_tx_cdc)
         self.submodules += amc_rtm_link_tx_cdc
@@ -375,26 +379,20 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules += amc_rtm_link_rx_cdc
         self.comb += [
             # core <--> etherbone
-            amc_rtm_link_port.source.connect(amc_rtm_link_etherbone.sink),
-            amc_rtm_link_etherbone.source.connect(amc_rtm_link_port.sink),
+            amc_rtm_link_depacketizer.source.connect(amc_rtm_link_etherbone.sink),
+            amc_rtm_link_etherbone.source.connect(amc_rtm_link_packetizer.sink),
             
             # core --> serdes
-            amc_rtm_link_core.source.connect(amc_rtm_link_tx_cdc.sink),
+            amc_rtm_link_packetizer.source.connect(amc_rtm_link_tx_cdc.sink),
             If(amc_rtm_link_tx_cdc.source.stb & amc_rtm_link_init.ready,
-                amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_tx_cdc.source.data[0:8]),
-                amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_tx_cdc.source.data[8:16]),
-                amc_rtm_link_serdes.encoder.d[2].eq(amc_rtm_link_tx_cdc.source.data[16:24]),
-                amc_rtm_link_serdes.encoder.d[3].eq(amc_rtm_link_tx_cdc.source.data[24:32])
+                amc_rtm_link_serdes.tx_data.eq(amc_rtm_link_tx_cdc.source.data)
             ),
             amc_rtm_link_tx_cdc.source.ack.eq(amc_rtm_link_init.ready),
 
             # serdes --> core
             amc_rtm_link_rx_cdc.sink.stb.eq(amc_rtm_link_init.ready),
-            amc_rtm_link_rx_cdc.sink.data[0:8].eq(amc_rtm_link_serdes.decoders[0].d),
-            amc_rtm_link_rx_cdc.sink.data[8:16].eq(amc_rtm_link_serdes.decoders[1].d),
-            amc_rtm_link_rx_cdc.sink.data[16:24].eq(amc_rtm_link_serdes.decoders[2].d),
-            amc_rtm_link_rx_cdc.sink.data[24:32].eq(amc_rtm_link_serdes.decoders[3].d),
-            amc_rtm_link_rx_cdc.source.connect(amc_rtm_link_core.sink),
+            amc_rtm_link_rx_cdc.sink.data.eq(amc_rtm_link_serdes.rx_data),
+            amc_rtm_link_rx_cdc.source.connect(amc_rtm_link_depacketizer.sink),
         ]
         self.add_wb_slave(mem_decoder(self.mem_map["amc_rtm_link"]), amc_rtm_link_etherbone.wishbone.bus)
 

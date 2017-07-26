@@ -125,7 +125,6 @@ static void amc_rtm_link_test(void)
 
 	seed_32 = 0;
 	flush_cpu_dcache();
-	flush_l2_cache();
 	for(i=0;i<AMC_RTM_LINK_RAM_SIZE/4;i++) {
 		seed_32 = seed_to_data_32(seed_32, 1);
 		if(array[i] != seed_32)
