@@ -81,6 +81,14 @@ class PhaseDetector(Module, AutoCSR):
         ]
 
 
+# serdes master <--> slave synchronization:
+# 1) master sends idle pattern (zeroes) to reset slave.
+# 2) master sends K28.5 commas to allow slave to synchronize, slave sends idle pattern.
+# 3) slave sends K28.5 commas to allow master to synchronize, master sends K28.5 commas.
+# 4) master stops sending K28.5 commas.
+# 5) slave stops sending K25.5 commas.
+# 6) link is ready.
+
 class SerdesMasterInit(Module):
     def __init__(self, serdes, taps):
         self.reset = Signal()
