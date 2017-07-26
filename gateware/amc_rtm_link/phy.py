@@ -82,7 +82,7 @@ class PhaseDetector(Module, AutoCSR):
 
 
 class SerdesMasterInit(Module):
-    def __init__(self, serdes, sync_pattern, taps):
+    def __init__(self, serdes, taps):
         self.reset = Signal()
         self.error = Signal()
         self.ready = Signal()
@@ -111,7 +111,7 @@ class SerdesMasterInit(Module):
             serdes.rx_delay_rst.eq(1),
             NextValue(bitslip, 0),
             NextState("RESET_SLAVE"),
-            serdes.tx_pattern_en.eq(1)
+            serdes.tx_idle.eq(1)
         )
         fsm.act("RESET_SLAVE",
             timer.wait.eq(1),
@@ -119,14 +119,13 @@ class SerdesMasterInit(Module):
                 timer.wait.eq(0),
                 NextState("SEND_PATTERN")
             ),
-            serdes.tx_pattern_en.eq(1)
+            serdes.tx_idle.eq(1)
         )
         fsm.act("SEND_PATTERN",
-            If(serdes.rx_pattern != 0,
+            If(~serdes.rx_idle,
                 NextState("WAIT_STABLE")
             ),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         fsm.act("WAIT_STABLE",
             timer.wait.eq(1),
@@ -134,12 +133,11 @@ class SerdesMasterInit(Module):
                 timer.wait.eq(0),
                 NextState("CHECK_PATTERN")
             ),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         fsm.act("CHECK_PATTERN",
             If(~delay_min_found,
-                If(serdes.rx_pattern == sync_pattern,
+                If(serdes.rx_comma,
                     timer.wait.eq(1),
                     If(timer.done,
                         NextValue(delay_min, delay),
@@ -149,7 +147,7 @@ class SerdesMasterInit(Module):
                     NextState("INC_DELAY_BITSLIP")
                 ),
             ).Else(
-                If(serdes.rx_pattern != sync_pattern,
+                If(~serdes.rx_comma,
                     NextValue(delay_max, delay),
                     NextValue(delay_max_found, 1),
                     NextState("RESET_SAMPLING_WINDOW")
@@ -157,8 +155,7 @@ class SerdesMasterInit(Module):
                     NextState("INC_DELAY_BITSLIP")
                 )
             ),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         self.comb += serdes.rx_bitslip_value.eq(bitslip)
         fsm.act("INC_DELAY_BITSLIP",
@@ -179,15 +176,13 @@ class SerdesMasterInit(Module):
                 serdes.rx_delay_inc.eq(1),
                 serdes.rx_delay_ce.eq(1)
             ),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         fsm.act("RESET_SAMPLING_WINDOW",
             NextValue(delay, 0),
             serdes.rx_delay_rst.eq(1),
             NextState("WAIT_SAMPLING_WINDOW"),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         fsm.act("CONFIGURE_SAMPLING_WINDOW",
             If(delay == (delay_min + (delay_max - delay_min)[1:]),
@@ -198,8 +193,7 @@ class SerdesMasterInit(Module):
                 serdes.rx_delay_ce.eq(1),
                 NextState("WAIT_SAMPLING_WINDOW")
             ),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         fsm.act("WAIT_SAMPLING_WINDOW",
             timer.wait.eq(1),
@@ -207,8 +201,7 @@ class SerdesMasterInit(Module):
                 timer.wait.eq(0),
                 NextState("CONFIGURE_SAMPLING_WINDOW")
             ),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         fsm.act("READY",
             self.ready.eq(1)
@@ -219,7 +212,7 @@ class SerdesMasterInit(Module):
 
 
 class SerdesSlaveInit(Module, AutoCSR):
-    def __init__(self, serdes, sync_pattern, taps):
+    def __init__(self, serdes, taps):
         self.reset = Signal()
         self.ready = Signal()
         self.error = Signal()
@@ -236,7 +229,7 @@ class SerdesSlaveInit(Module, AutoCSR):
         timer = WaitTimer(1024)
         self.submodules += timer
 
-        self.comb += self.reset.eq(serdes.rx_pattern == 0)
+        self.comb += self.reset.eq(serdes.rx_idle)
 
         self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
         fsm.act("IDLE",
@@ -248,7 +241,7 @@ class SerdesSlaveInit(Module, AutoCSR):
             serdes.rx_delay_rst.eq(1),
             NextValue(bitslip, 0),
             NextState("WAIT_STABLE"),
-            serdes.tx_pattern_en.eq(1)
+            serdes.tx_idle.eq(1)
         )
         fsm.act("WAIT_STABLE",
             timer.wait.eq(1),
@@ -256,11 +249,11 @@ class SerdesSlaveInit(Module, AutoCSR):
                 timer.wait.eq(0),
                 NextState("CHECK_PATTERN")
             ),
-            serdes.tx_pattern_en.eq(1)
+            serdes.tx_idle.eq(1)
         )
         fsm.act("CHECK_PATTERN",
             If(~delay_min_found,
-                If(serdes.rx_pattern == sync_pattern,
+                If(serdes.rx_comma,
                     timer.wait.eq(1),
                     If(timer.done,
                         timer.wait.eq(0),
@@ -271,7 +264,7 @@ class SerdesSlaveInit(Module, AutoCSR):
                     NextState("INC_DELAY_BITSLIP")
                 ),
             ).Else(
-                If(serdes.rx_pattern != sync_pattern,
+                If(~serdes.rx_comma,
                     NextValue(delay_max, delay),
                     NextValue(delay_max_found, 1),
                     NextState("RESET_SAMPLING_WINDOW")
@@ -279,7 +272,7 @@ class SerdesSlaveInit(Module, AutoCSR):
                     NextState("INC_DELAY_BITSLIP")
                 )
             ),
-            serdes.tx_pattern_en.eq(1)
+            serdes.tx_idle.eq(1)
         )
         self.comb += serdes.rx_bitslip_value.eq(bitslip)
         fsm.act("INC_DELAY_BITSLIP",
@@ -300,7 +293,7 @@ class SerdesSlaveInit(Module, AutoCSR):
                 serdes.rx_delay_inc.eq(1),
                 serdes.rx_delay_ce.eq(1)
             ),
-            serdes.tx_pattern_en.eq(1)
+            serdes.tx_idle.eq(1)
         )
         fsm.act("RESET_SAMPLING_WINDOW",
             NextValue(delay, 0),
@@ -327,12 +320,11 @@ class SerdesSlaveInit(Module, AutoCSR):
         fsm.act("SEND_PATTERN",
             timer.wait.eq(1),
             If(timer.done,
-                If(serdes.rx_pattern != sync_pattern,
+                If(~serdes.rx_comma,
                     NextState("READY")
                 )
             ),
-            serdes.tx_pattern_en.eq(1),
-            serdes.tx_pattern.eq(sync_pattern)
+            serdes.tx_comma.eq(1)
         )
         fsm.act("READY",
             self.ready.eq(1)

@@ -79,7 +79,7 @@ if sys.argv[1] == "init":
     print("ready: {:d}".format(wb.regs.amc_rtm_link_control_ready.read()))
 elif sys.argv[1] == "wishbone":
     write_pattern(1024)
-    errors = check_pattern(1024, debug=False)
+    errors = check_pattern(1024, debug=True)
     print("errors: {:d}".format(errors))
 
 elif sys.argv[1] == "analyzer":

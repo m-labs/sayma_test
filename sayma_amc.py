@@ -605,7 +605,7 @@ class AMCRTMLinkTestSoC(SoCCore):
         amc_rtm_link_pads = platform.request("amc_rtm_link")
         amc_rtm_link_serdes = KUSSerdes(amc_rtm_link_pll, amc_rtm_link_pads, mode="master")
         self.submodules.amc_rtm_link_serdes = amc_rtm_link_serdes
-        amc_rtm_link_init = SerdesMasterInit(amc_rtm_link_serdes, sync_pattern=0x123456789a, taps=512)
+        amc_rtm_link_init = SerdesMasterInit(amc_rtm_link_serdes, taps=512)
         self.submodules.amc_rtm_link_init = amc_rtm_link_init
         self.submodules.amc_rtm_link_control = SerdesControl(amc_rtm_link_init, mode="master")
 
@@ -641,19 +641,13 @@ class AMCRTMLinkTestSoC(SoCCore):
             # core --> serdes
             amc_rtm_link_packetizer.source.connect(amc_rtm_link_tx_cdc.sink),
             If(amc_rtm_link_tx_cdc.source.valid & amc_rtm_link_init.ready,
-                amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_tx_cdc.source.data[0:8]),
-                amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_tx_cdc.source.data[8:16]),
-                amc_rtm_link_serdes.encoder.d[2].eq(amc_rtm_link_tx_cdc.source.data[16:24]),
-                amc_rtm_link_serdes.encoder.d[3].eq(amc_rtm_link_tx_cdc.source.data[24:32])
+                amc_rtm_link_serdes.tx_data.eq(amc_rtm_link_tx_cdc.source.data)
             ),
             amc_rtm_link_tx_cdc.source.ready.eq(amc_rtm_link_init.ready),
 
             # serdes --> core
             amc_rtm_link_rx_cdc.sink.valid.eq(amc_rtm_link_init.ready),
-            amc_rtm_link_rx_cdc.sink.data[0:8].eq(amc_rtm_link_serdes.decoders[0].d),
-            amc_rtm_link_rx_cdc.sink.data[8:16].eq(amc_rtm_link_serdes.decoders[1].d),
-            amc_rtm_link_rx_cdc.sink.data[16:24].eq(amc_rtm_link_serdes.decoders[2].d),
-            amc_rtm_link_rx_cdc.sink.data[24:32].eq(amc_rtm_link_serdes.decoders[3].d),
+            amc_rtm_link_rx_cdc.sink.data.eq(amc_rtm_link_serdes.rx_data),
             amc_rtm_link_rx_cdc.source.connect(amc_rtm_link_depacketizer.sink),
         ]
         self.add_wb_slave(mem_decoder(self.mem_map["amc_rtm_link"]), amc_rtm_link_etherbone.wishbone.bus)

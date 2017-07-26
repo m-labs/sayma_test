@@ -67,10 +67,13 @@ class S7SerdesPLL(Module):
 
 class S7Serdes(Module):
     def __init__(self, pll, pads, mode="master"):
-        self.tx_pattern = Signal(40)
-        self.tx_pattern_en = Signal()
+        self.tx_data = Signal(32)
+        self.rx_data = Signal(32)
 
-        self.rx_pattern = Signal(40)
+        self.tx_idle = Signal()
+        self.tx_comma = Signal()
+        self.rx_idle = Signal()
+        self.rx_comma = Signal()
 
         self.rx_bitslip_value = Signal(6)
         self.rx_delay_rst = Signal()
@@ -103,14 +106,16 @@ class S7Serdes(Module):
         self.comb += self.cd_serdes_5x.rst.eq(self.cd_serdes.rst)
 
         # control/status cdc
-        tx_pattern = Signal(40)
-        tx_pattern_en = Signal()
-        rx_pattern = Signal(40)
+        tx_idle = Signal()
+        tx_comma = Signal()
+        rx_idle = Signal()
+        rx_comma = Signal()
         rx_bitslip_value = Signal(6)
         self.specials += [
-            MultiReg(self.tx_pattern, tx_pattern, "serdes"),
-            MultiReg(self.tx_pattern_en, tx_pattern_en, "serdes"),
-            MultiReg(rx_pattern, self.rx_pattern, "sys")
+            MultiReg(self.tx_idle, tx_idle, "serdes"),
+            MultiReg(self.tx_comma, tx_comma, "serdes"),
+            MultiReg(rx_idle, self.rx_idle, "sys"),
+            MultiReg(rx_comma, self.rx_comma, "sys")
         ]
         self.specials += MultiReg(self.rx_bitslip_value, rx_bitslip_value, "serdes"),
 
@@ -146,9 +151,20 @@ class S7Serdes(Module):
 
         # tx data
         self.submodules.tx_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
+        self.comb += [
+            If(tx_comma,
+                self.encoder.k[0].eq(1),
+                self.encoder.d[0].eq(0xbc)
+            ).Else(
+                self.encoder.d[0].eq(self.tx_data[0:8]),
+                self.encoder.d[1].eq(self.tx_data[8:16]),
+                self.encoder.d[2].eq(self.tx_data[16:24]),
+                self.encoder.d[3].eq(self.tx_data[24:32])
+            )
+        ]
         self.sync.serdes += \
-            If(tx_pattern_en,
-                self.tx_gearbox.i.eq(tx_pattern)
+            If(tx_idle,
+                self.tx_gearbox.i.eq(0)
             ).Else(
                 self.tx_gearbox.i.eq(Cat(*[self.encoder.output[i] for i in range(4)]))
             )
@@ -296,5 +312,14 @@ class S7Serdes(Module):
             self.decoders[1].input.eq(self.rx_bitslip.o[10:20]),
             self.decoders[2].input.eq(self.rx_bitslip.o[20:30]),
             self.decoders[3].input.eq(self.rx_bitslip.o[30:40]),
-            rx_pattern.eq(self.rx_bitslip.o)
+            self.rx_data[0:8].eq(self.decoders[0].d),
+            self.rx_data[8:16].eq(self.decoders[1].d),
+            self.rx_data[16:24].eq(self.decoders[2].d),
+            self.rx_data[24:32].eq(self.decoders[3].d),
+            rx_idle.eq(self.rx_bitslip.o == 0),
+            rx_comma.eq(((self.decoders[0].d == 0xbc) & (self.decoders[0].k == 1)) &
+                        ((self.decoders[1].d == 0x00) & (self.decoders[1].k == 0)) &
+                        ((self.decoders[2].d == 0x00) & (self.decoders[2].k == 0)) &
+                        ((self.decoders[3].d == 0x00) & (self.decoders[3].k == 0)))
+
         ]
