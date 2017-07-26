@@ -312,10 +312,7 @@ class S7Serdes(Module):
             self.decoders[1].input.eq(self.rx_bitslip.o[10:20]),
             self.decoders[2].input.eq(self.rx_bitslip.o[20:30]),
             self.decoders[3].input.eq(self.rx_bitslip.o[30:40]),
-            self.rx_data[0:8].eq(self.decoders[0].d),
-            self.rx_data[8:16].eq(self.decoders[1].d),
-            self.rx_data[16:24].eq(self.decoders[2].d),
-            self.rx_data[24:32].eq(self.decoders[3].d),
+            self.rx_data.eq(Cat(*[self.decoders[i].d for i in range(4)])),
             rx_idle.eq(self.rx_bitslip.o == 0),
             rx_comma.eq(((self.decoders[0].d == 0xbc) & (self.decoders[0].k == 1)) &
                         ((self.decoders[1].d == 0x00) & (self.decoders[1].k == 0)) &
