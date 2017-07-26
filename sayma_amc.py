@@ -617,7 +617,8 @@ class AMCRTMLinkTestSoC(SoCCore):
         platform.add_period_constraint(amc_rtm_link_serdes.cd_serdes_5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            amc_rtm_link_serdes.cd_serdes.clk)
+            amc_rtm_link_serdes.cd_serdes.clk,
+            amc_rtm_link_serdes.cd_serdes_5x.clk)
 
 
         # wishbone slave
