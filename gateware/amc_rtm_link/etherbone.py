@@ -546,7 +546,7 @@ class EtherboneRecordSender(Module):
 
 
 class EtherboneRecord(Module):
-    def __init__(self, endianness="big"):
+    def __init__(self):
         self.sink = sink = stream.Endpoint(etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(etherbone_packet_user_description(32))
 
@@ -559,8 +559,6 @@ class EtherboneRecord(Module):
             sink.connect(depacketizer.sink),
             depacketizer.source.connect(receiver.sink)
         ]
-        if endianness is "big":
-            self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
 
         # receive mmap stream, encode it and send records
         self.submodules.sender = sender = EtherboneRecordSender()
@@ -572,9 +570,6 @@ class EtherboneRecord(Module):
             	             (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
             	             (sender.source.rcount != 0)*4 + sender.source.rcount*4)
         ]
-        if endianness is "big":
-            self.comb += packetizer.sink.data.eq(reverse_bytes(sender.source.data))
-
 
 
 # etherbone wishbone
