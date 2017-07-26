@@ -621,10 +621,11 @@ class AMCRTMLinkTestSoC(SoCCore):
 
 
         # wishbone slave
-        amc_rtm_link_core = packet.Core(clk_freq)
-        amc_rtm_link_port = amc_rtm_link_core.crossbar.get_port(0x01)
+        amc_rtm_link_depacketizer = packet.Depacketizer(clk_freq)
+        amc_rtm_link_packetizer = packet.Packetizer()
+        self.submodules += amc_rtm_link_depacketizer, amc_rtm_link_packetizer
         amc_rtm_link_etherbone = etherbone.Etherbone(mode="slave")
-        self.submodules += amc_rtm_link_core, amc_rtm_link_etherbone
+        self.submodules += amc_rtm_link_etherbone
         amc_rtm_link_tx_cdc = stream.AsyncFIFO([("data", 32)], 8)
         amc_rtm_link_tx_cdc = ClockDomainsRenamer({"write": "sys", "read": "serdes"})(amc_rtm_link_tx_cdc)
         self.submodules += amc_rtm_link_tx_cdc
@@ -633,11 +634,11 @@ class AMCRTMLinkTestSoC(SoCCore):
         self.submodules += amc_rtm_link_rx_cdc
         self.comb += [
             # core <--> etherbone
-            amc_rtm_link_port.source.connect(amc_rtm_link_etherbone.sink),
-            amc_rtm_link_etherbone.source.connect(amc_rtm_link_port.sink),
+            amc_rtm_link_depacketizer.source.connect(amc_rtm_link_etherbone.sink),
+            amc_rtm_link_etherbone.source.connect(amc_rtm_link_packetizer.sink),
             
             # core --> serdes
-            amc_rtm_link_core.source.connect(amc_rtm_link_tx_cdc.sink),
+            amc_rtm_link_packetizer.source.connect(amc_rtm_link_tx_cdc.sink),
             If(amc_rtm_link_tx_cdc.source.valid & amc_rtm_link_init.ready,
                 amc_rtm_link_serdes.encoder.d[0].eq(amc_rtm_link_tx_cdc.source.data[0:8]),
                 amc_rtm_link_serdes.encoder.d[1].eq(amc_rtm_link_tx_cdc.source.data[8:16]),
@@ -652,7 +653,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             amc_rtm_link_rx_cdc.sink.data[8:16].eq(amc_rtm_link_serdes.decoders[1].d),
             amc_rtm_link_rx_cdc.sink.data[16:24].eq(amc_rtm_link_serdes.decoders[2].d),
             amc_rtm_link_rx_cdc.sink.data[24:32].eq(amc_rtm_link_serdes.decoders[3].d),
-            amc_rtm_link_rx_cdc.source.connect(amc_rtm_link_core.sink),
+            amc_rtm_link_rx_cdc.source.connect(amc_rtm_link_depacketizer.sink),
         ]
         self.add_wb_slave(mem_decoder(self.mem_map["amc_rtm_link"]), amc_rtm_link_etherbone.wishbone.bus)
 
