@@ -35,7 +35,7 @@ _io = [
         IOStandard("LVCMOS25")
     ),
 
-    # dac
+    # dac 0
     ("dac_spi", 0,
         Subsignal("clk", Pins("T13")),
         Subsignal("cs_n", Pins("U14")),
@@ -43,9 +43,19 @@ _io = [
         Subsignal("miso", Pins("R13")),
         IOStandard("LVCMOS25")
     ),
-    ("dac_txen", 0, Pins("V16"), IOStandard("LVCMOS25")),
-    ("dac_txen", 1, Pins("U16"), IOStandard("LVCMOS25")),
+    ("dac_txen", 0, Pins("V16 U16"), IOStandard("LVCMOS25")),
     ("dac_rst_n", 0, Pins("U15"), IOStandard("LVCMOS25")),
+
+    # dac 1
+    ("dac_spi", 1,
+        Subsignal("clk", Pins("J18")),
+        Subsignal("cs_n", Pins("K18")),
+        Subsignal("mosi", Pins("J15")),
+        Subsignal("miso", Pins("J16")),
+        IOStandard("LVCMOS25")
+    ),
+    ("dac_txen", 1, Pins("L17 L14"), IOStandard("LVCMOS25")),
+    ("dac_rst_n", 1, Pins("U15"), IOStandard("LVCMOS25")),
 
     # amc_rtm_link
     ("amc_rtm_link", 0,
