@@ -21,7 +21,7 @@ from litedram.frontend.bist import LiteDRAMBISTGenerator
 from litedram.frontend.bist import LiteDRAMBISTChecker
 
 from litejesd204b.common import *
-from litejesd204b.phy.gth import GTHQuadPLL
+from litejesd204b.phy.gth import GTHQuadPLL as JESD204BGTHQuadPLL
 from litejesd204b.phy import LiteJESD204BPhyTX
 from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
@@ -439,7 +439,7 @@ class JESDTestSoC(SoCCore):
         phys = []
         for i in range(len(jesd_pads.txp)):
             if i%4 == 0:
-                qpll = GTHQuadPLL(self.refclk, refclk_freq, linerate)
+                qpll = JESD204BGTHQuadPLL(self.refclk, refclk_freq, linerate)
                 self.submodules += qpll
                 print(qpll)
 
