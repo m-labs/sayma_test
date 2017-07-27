@@ -13,6 +13,7 @@ from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 from litex.soc.cores.uart import UARTWishboneBridge
 from litex.soc.cores.spi import SPIMaster
+from litex.soc.cores.gpio import GPIOOut
 from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
@@ -35,41 +36,44 @@ _io = [
         IOStandard("LVCMOS25")
     ),
 
-    # hmc830
-    ("hmc830_spi", 0,
+    # hmc (830 and 7043)
+    ("hmc_spi", 0,
         Subsignal("clk", Pins("A17")),
-        Subsignal("cs_n", Pins("")),
-        Subsignal("mosi", Pins("")),
-        Subsignal("miso", Pins("")),
+        Subsignal("mosi", Pins("B16")),
+        Subsignal("miso", Pins("D9")),
         IOStandard("LVCMOS25")
     ),
-    ("hmc803_spi_sen", 0, Pins("C8"), IOStandard("LVCMOS25")),
+    ("hmc830_spi_cs", 0, Pins("C8"), IOStandard("LVCMOS25")),
+    ("hmc7043_spi_cs", 0, Pins("D16"), IOStandard("LVCMOS25")),
+    ("hmc7043_reset", 0, Pins("E17"), IOStandard("LVCMOS25")),
 
     # clock mux
     ("clk_src_ext_sel", 0, Pins("P15"), IOStandard("LVCMOS25")),
     ("ref_clk_src_sel", 0, Pins("J14"), IOStandard("LVCMOS25")),
+    ("dac_clk_src_sel", 0, Pins("P16"), IOStandard("LVCMOS25")),
+
+    # dac
+    ("dac_rst_n", 0, Pins("U15"), IOStandard("LVCMOS25")),
 
     # dac 0
-    ("dac_spi", 0,
+    ("dac0_spi", 0,
         Subsignal("clk", Pins("T13")),
         Subsignal("cs_n", Pins("U14")),
         Subsignal("mosi", Pins("V17")),
         Subsignal("miso", Pins("R13")),
         IOStandard("LVCMOS25")
     ),
-    ("dac_txen", 0, Pins("V16 U16"), IOStandard("LVCMOS25")),
-    ("dac_rst_n", 0, Pins("U15"), IOStandard("LVCMOS25")),
+    ("dac0_txen", 0, Pins("V16 U16"), IOStandard("LVCMOS25")),
 
     # dac 1
-    ("dac_spi", 1,
+    ("dac1_spi", 0,
         Subsignal("clk", Pins("J18")),
         Subsignal("cs_n", Pins("K18")),
         Subsignal("mosi", Pins("J15")),
         Subsignal("miso", Pins("J16")),
         IOStandard("LVCMOS25")
     ),
-    ("dac_txen", 1, Pins("L17 L14"), IOStandard("LVCMOS25")),
-    ("dac_rst_n", 1, Pins("U15"), IOStandard("LVCMOS25")),
+    ("dac1_txen", 0, Pins("L17 L14"), IOStandard("LVCMOS25")),
 
     # amc_rtm_link
     ("amc_rtm_link", 0,
@@ -139,17 +143,21 @@ class _CRG(Module):
 
 class JESDTestSoC(SoCCore):
     csr_map = {
-        "spi":     20
+        "hmc_spi":      20,
+        "hmc_spi_sel":  21,
+        "dac0_spi":     22,
+        "dac1_spi":     23,
+        "analyzer":     30,
     }
     csr_map.update(SoCCore.csr_map)
 
-    def __init__(self, platform, dac=0):
+    def __init__(self, platform):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC JESD Test Design",
+            ident="Sayma RTM JESD Test Design",
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
@@ -161,19 +169,78 @@ class JESDTestSoC(SoCCore):
 
         # clock mux : 125MHz ext SMA clock to HMC830 input 
         self.comb += [
-            platform.request("clk_src_ext_sel").eq(1),
-            platform.request("ref_clk_src_sel").eq(1)
+            platform.request("clk_src_ext_sel").eq(1), # use ext clk from sma
+            platform.request("ref_clk_src_sel").eq(1),
+            platform.request("dac_clk_src_sel").eq(1), # use clk from hmc830
         ]
 
-        # dac spi
-        spi_pads = platform.request("dac_spi", dac)
-        self.submodules.spi = SPIMaster(spi_pads)
-
-        # dac control
+        # hmc spi
+        hmc_spi_pads = platform.request("hmc_spi")
+        self.submodules.hmc_spi = SPIMaster(hmc_spi_pads)
+        hmc830_spi_cs = platform.request("hmc830_spi_cs")
+        hmc7043_spi_cs = platform.request("hmc7043_spi_cs")
+        hmc_spi_sel = Signal()
+        self.submodules.hmc_spi_sel = GPIOOut(hmc_spi_sel)
         self.comb += [
-            platform.request("dac_txen", dac).eq(1),
-            platform.request("dac_rst_n", dac).eq(1)
+            If(hmc_spi_sel,
+                hmc830_spi_cs.eq(0),
+                hmc7043_spi_cs.eq(self.hmc_spi.core.cs_n)
+            ).Else(
+                hmc830_spi_cs.eq(~self.hmc_spi.core.cs_n),
+                hmc7043_spi_cs.eq(1)
+            ),
+            platform.request("hmc7043_reset").eq(0)
         ]
+
+        # dac_rst_n
+        self.comb += platform.request("dac_rst_n").eq(1)
+
+        # dac0 spi
+        dac0_spi_pads = platform.request("dac0_spi")
+        self.submodules.dac0_spi = SPIMaster(dac0_spi_pads)
+
+        # dac0 control
+        self.comb += platform.request("dac0_txen").eq(0b11)
+
+        # dac1 spi
+        dac1_spi_pads = platform.request("dac1_spi")
+        self.submodules.dac1_spi = SPIMaster(dac1_spi_pads)
+
+        # dac1 control
+        self.comb += platform.request("dac1_txen").eq(0b11)
+
+        # analyzer
+        hmc_spi_group = [
+            hmc_spi_pads.clk,
+            hmc_spi_pads.mosi,
+            hmc_spi_pads.miso,
+            hmc830_spi_cs,
+            hmc7043_spi_cs
+        ]
+        dac0_spi_group = [
+            dac0_spi_pads.clk,
+            dac0_spi_pads.mosi,
+            dac0_spi_pads.miso,
+            dac0_spi_pads.cs_n
+        ]
+        dac1_spi_group = [
+            dac1_spi_pads.clk,
+            dac1_spi_pads.mosi,
+            dac1_spi_pads.miso,
+            dac1_spi_pads.cs_n
+        ]
+        analyzer_signals = {
+            0 : hmc_spi_group,
+            1 : dac0_spi_group,
+            2 : dac1_spi_group
+        }
+
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 8192)
+
+    def do_exit(self, vns):
+        if hasattr(self, "analyzer"):
+            self.analyzer.export_csv(vns, "test/sayma_rtm/analyzer.csv")
+
 
 
 class AMCRTMLinkTestSoC(SoCCore):
@@ -229,7 +296,6 @@ class AMCRTMLinkTestSoC(SoCCore):
             self.crg.cd_sys.clk,
             amc_rtm_link_serdes.cd_serdes.clk,
             amc_rtm_link_serdes.cd_serdes_5x.clk)
-
 
         # wishbone master
         amc_rtm_link_depacketizer = packet.Depacketizer(clk_freq)
