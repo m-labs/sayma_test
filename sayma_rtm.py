@@ -35,6 +35,20 @@ _io = [
         IOStandard("LVCMOS25")
     ),
 
+    # hmc830
+    ("hmc830_spi", 0,
+        Subsignal("clk", Pins("A17")),
+        Subsignal("cs_n", Pins("")),
+        Subsignal("mosi", Pins("")),
+        Subsignal("miso", Pins("")),
+        IOStandard("LVCMOS25")
+    ),
+    ("hmc803_spi_sen", 0, Pins("C8"), IOStandard("LVCMOS25")),
+
+    # clock mux
+    ("clk_src_ext_sel", 0, Pins("P15"), IOStandard("LVCMOS25")),
+    ("ref_clk_src_sel", 0, Pins("J14"), IOStandard("LVCMOS25")),
+
     # dac 0
     ("dac_spi", 0,
         Subsignal("clk", Pins("T13")),
@@ -144,6 +158,12 @@ class JESDTestSoC(SoCCore):
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
                                                   clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
+
+        # clock mux : 125MHz ext SMA clock to HMC830 input 
+        self.comb += [
+            platform.request("clk_src_ext_sel").eq(1),
+            platform.request("ref_clk_src_sel").eq(1)
+        ]
 
         # dac spi
         spi_pads = platform.request("dac_spi", dac)
