@@ -27,28 +27,28 @@ class AD9154SPI:
         config |= 0*CS_POLARITY | 0*CLK_POLARITY | 0*CLK_PHASE
         config |= 0*LSB_FIRST | 0*HALF_DUPLEX
         config |= 8*DIV_READ | 8*DIV_WRITE
-        self.regs.spi_config.write(config)
+        self.regs.dac0_spi_config.write(config)
 
     def write(self, addr, byte):
         self.configure()
         cmd = (0 << 15) | (addr & 0x7ff)
         val = (cmd << 8) | (byte & 0xff)
-        self.regs.spi_xfer.write(0b01 | 24*WRITE_LENGTH)
-        self.regs.spi_mosi_data.write(val << (32-24))
-        self.regs.spi_start.write(1)
-        while (self.regs.spi_pending.read() & 0x1):
+        self.regs.dac0_spi_xfer.write(0b01 | 24*WRITE_LENGTH)
+        self.regs.dac0_spi_mosi_data.write(val << (32-24))
+        self.regs.dac0_spi_start.write(1)
+        while (self.regs.dac0_spi_pending.read() & 0x1):
             pass
 
     def read(self, addr):
         self.configure()
         cmd = (1 << 15) | (addr & 0x7ff)
         val = (cmd << 8)
-        self.regs.spi_xfer.write(0b01 | 16*WRITE_LENGTH | 8*READ_LENGTH)
-        self.regs.spi_mosi_data.write(val << (32-24))
-        self.regs.spi_start.write(1)
-        while (self.regs.spi_pending.read() & 0x1):
+        self.regs.dac0_spi_xfer.write(0b01 | 16*WRITE_LENGTH | 8*READ_LENGTH)
+        self.regs.dac0_spi_mosi_data.write(val << (32-24))
+        self.regs.dac0_spi_start.write(1)
+        while (self.regs.dac0_spi_pending.read() & 0x1):
             pass
-        return self.regs.spi_miso_data.read() & 0xff
+        return self.regs.dac0_spi_miso_data.read() & 0xff
 
 class AD9154(AD9154SPI):
     def __init__(self, regs):
