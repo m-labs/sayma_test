@@ -19,46 +19,51 @@ WRITE_LENGTH = (1 << 16)
 READ_LENGTH  = (1 << 24)
 
 class AD9154SPI:
-    def __init__(self, regs):
+    def __init__(self, regs, n):
         self.regs = regs
+        self.n = n
 
     def configure(self):
         config = 0*OFFLINE
         config |= 0*CS_POLARITY | 0*CLK_POLARITY | 0*CLK_PHASE
         config |= 0*LSB_FIRST | 0*HALF_DUPLEX
         config |= 8*DIV_READ | 8*DIV_WRITE
-        self.regs.dac0_spi_config.write(config)
+        getattr(self.regs, "dac"+str(self.n)+"_spi_config").write(config)
 
     def write(self, addr, byte):
         self.configure()
         cmd = (0 << 15) | (addr & 0x7ff)
         val = (cmd << 8) | (byte & 0xff)
-        self.regs.dac0_spi_xfer.write(0b01 | 24*WRITE_LENGTH)
-        self.regs.dac0_spi_mosi_data.write(val << (32-24))
-        self.regs.dac0_spi_start.write(1)
-        while (self.regs.dac0_spi_pending.read() & 0x1):
+        getattr(self.regs, "dac"+str(self.n)+"_spi_xfer").write(0b01 | 24*WRITE_LENGTH)
+        getattr(self.regs, "dac"+str(self.n)+"_spi_mosi_data").write(val << (32-24))
+        getattr(self.regs, "dac"+str(self.n)+"_spi_start").write(1)
+        while (getattr(self.regs, "dac"+str(self.n)+"_spi_pending").read() & 0x1):
             pass
 
     def read(self, addr):
         self.configure()
         cmd = (1 << 15) | (addr & 0x7ff)
         val = (cmd << 8)
-        self.regs.dac0_spi_xfer.write(0b01 | 16*WRITE_LENGTH | 8*READ_LENGTH)
-        self.regs.dac0_spi_mosi_data.write(val << (32-24))
-        self.regs.dac0_spi_start.write(1)
-        while (self.regs.dac0_spi_pending.read() & 0x1):
+        getattr(self.regs, "dac"+str(self.n)+"_spi_xfer").write(0b01 | 16*WRITE_LENGTH | 8*READ_LENGTH)
+        getattr(self.regs, "dac"+str(self.n)+"_spi_mosi_data").write(val << (32-24))
+        getattr(self.regs, "dac"+str(self.n)+"_spi_start").write(1)
+        while (getattr(self.regs, "dac"+str(self.n)+"_spi_pending").read() & 0x1):
             pass
-        return self.regs.dac0_spi_miso_data.read() & 0xff
+        return getattr(self.regs, "dac"+str(self.n)+"_spi_miso_data").read() & 0xff
+
 
 class AD9154(AD9154SPI):
-    def __init__(self, regs):
-        AD9154SPI.__init__(self, regs)
+    def __init__(self, regs, n=0):
+        AD9154SPI.__init__(self, regs, n)
 
     def check_presence(self):
         errors = 0
         errors += self.read(AD9154_CHIPTYPE) != 0x4
         errors += self.read(AD9154_PRODIDL) != 0x54
         errors += self.read(AD9154_PRODIDH) != 0x91
+        print("{:x}".format(self.read(AD9154_CHIPTYPE)))
+        print("{:x}".format(self.read(AD9154_PRODIDL)))
+        print("{:x}".format(self.read(AD9154_PRODIDH)))
         return errors == 0
 
     def reset(self):

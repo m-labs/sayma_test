@@ -140,8 +140,8 @@ _io = [
 
     # dac
     ("dac_refclk", 0,
-        Subsignal("p", Pins("K6")),
-        Subsignal("n", Pins("K5")),
+        Subsignal("p", Pins("V6")),
+        Subsignal("n", Pins("V5")),
     ),
     ("dac_sysref", 0,
         Subsignal("p", Pins("B10")),
@@ -154,13 +154,13 @@ _io = [
         IOStandard("LVDS")
     ),
     ("dac_jesd", 0,
-        Subsignal("txp", Pins("B6 C4 D6 F6 G4 J4 L4 N4")),
-        Subsignal("txn", Pins("B5 C3 D5 F5 G3 J3 L3 N3"))
+	    Subsignal("txp", Pins("R4 U4 W4 AA4 AC4 AE4 AG4 AH6")),
+        Subsignal("txn", Pins("R3 U3 W3 AA3 AC3 AE3 AG3 AH5"))
     ),
 
     ("dac_refclk", 1,
-        Subsignal("p", Pins("K6")),
-        Subsignal("n", Pins("K5")),
+        Subsignal("p", Pins("P6")),
+        Subsignal("n", Pins("P5")),
     ),
     ("dac_sysref", 1,
         Subsignal("p", Pins("B10")),
@@ -173,8 +173,8 @@ _io = [
         IOStandard("LVDS")
     ),
     ("dac_jesd", 1,
-        Subsignal("txp", Pins("R4 U4 W4 AA4 AC4 AE4 AG4 AH6")),
-        Subsignal("txn", Pins("R3 U3 W3 AA3 AC3 AE3 AG3 AH5"))
+        Subsignal("txp", Pins("B6 C4 D6 F6 G4 J4 L4 N4")),
+        Subsignal("txn", Pins("B5 C3 D5 F5 G3 J3 L3 N3"))
     ),
 
     # drtio
@@ -414,6 +414,13 @@ class JESDTestSoC(SoCCore):
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
+        # amc <--> rtm usr_uart / aux_uart redirection
+        aux_uart_pads = platform.request("serial", 1)
+        self.comb += [
+            aux_uart_pads.tx.eq(platform.request("usr_uart_p")),
+            platform.request("usr_uart_n").eq(aux_uart_pads.rx)
+        ]
+
         # jesd
         ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
         ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
@@ -476,6 +483,11 @@ class JESDTestSoC(SoCCore):
             self.core.sink.converter2.eq(Cat(data2, data2)),
             self.core.sink.converter3.eq(Cat(data3, data3))
         ]
+        
+        jesd_counter = Signal(32)
+        self.sync.phy0_tx += jesd_counter.eq(jesd_counter + 1)
+        self.comb += platform.request("user_led", 0).eq(jesd_counter[26])
+        self.comb += platform.request("user_led", 1).eq(self.core.jsync)
 
     def do_exit(self, vns):
         pass
@@ -503,6 +515,13 @@ class DRTIOTestSoC(SoCCore):
 
         self.crg.cd_sys.clk.attr.add("keep")
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
+
+        # amc <--> rtm usr_uart / aux_uart redirection
+        aux_uart_pads = platform.request("serial", 1)
+        self.comb += [
+            aux_uart_pads.tx.eq(platform.request("usr_uart_p")),
+            platform.request("usr_uart_n").eq(aux_uart_pads.rx)
+        ]
 
         refclk = Signal()
         refclk_pads = platform.request("rtm_refclk125")

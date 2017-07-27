@@ -18,8 +18,8 @@ dut.write(0x2, 0x0)
 # glbl_cfg1_ena_sysri[5:5] = 0x1
 dut.write(0x3, 0x2C)
 
-# glbl_cfg7_ena_clkgr[6:0] = 0x23
-dut.write(0x4, 0x23)
+# glbl_cfg7_ena_clkgr[6:0] = 0x7F
+dut.write(0x4, 0x7F)
 
 # glbl_cfg1_clear_alarms[0:0] = 0x0
 dut.write(0x6, 0x0)
@@ -272,10 +272,10 @@ dut.write(0xE3, 0x0)
 
 # clkgrp2_div1_cfg5_drvr_res[1:0] = 0x0
 # clkgrp2_div1_cfg5_drvr_spare[2:2] = 0x0
-# clkgrp2_div1_cfg5_drvr_mode[4:3] = 0x1
+# clkgrp2_div1_cfg5_drvr_mode[4:3] = 0x2
 # clkgrp2_div1_cfg_outbuf_dyn[5:5] = 0x0
 # clkgrp2_div1_cfg2_mutesel[7:6] = 0x0
-dut.write(0xE4, 0x8)
+dut.write(0xE4, 0x10)
 
 # clkgrp2_div2_cfg1_en[0:0] = 0x1
 # clkgrp2_div2_cfg1_phdelta_mslip[1:1] = 0x0
@@ -590,8 +590,8 @@ dut.write(0x134, 0x10)
 # clkgrp6_div2_cfg1_hi_perf[7:7] = 0x0
 dut.write(0x136, 0x71)
 
-# clkgrp6_div2_cfg12_divrat_lsb[7:0] = 0x4
-dut.write(0x137, 0x4)
+# clkgrp6_div2_cfg12_divrat_lsb[7:0] = 0x10
+dut.write(0x137, 0x10)
 
 # clkgrp6_div2_cfg12_divrat_msb[3:0] = 0x0
 dut.write(0x138, 0x0)
