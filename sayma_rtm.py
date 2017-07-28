@@ -145,8 +145,9 @@ class JESDTestSoC(SoCCore):
     csr_map = {
         "hmc_spi":      20,
         "hmc_spi_sel":  21,
-        "dac0_spi":     22,
-        "dac1_spi":     23,
+        "dac_reset":    22,
+        "dac0_spi":     23,
+        "dac1_spi":     24,
         "analyzer":     30,
     }
     csr_map.update(SoCCore.csr_map)
@@ -193,7 +194,7 @@ class JESDTestSoC(SoCCore):
         ]
 
         # dac_rst_n
-        self.comb += platform.request("dac_rst_n").eq(1)
+        self.submodules.dac_reset = GPIOOut(platform.request("dac_rst_n"))
 
         # dac0 spi
         dac0_spi_pads = platform.request("dac0_spi")
