@@ -61,9 +61,6 @@ class AD9154(AD9154SPI):
         errors += self.read(AD9154_CHIPTYPE) != 0x4
         errors += self.read(AD9154_PRODIDL) != 0x54
         errors += self.read(AD9154_PRODIDH) != 0x91
-        print("{:x}".format(self.read(AD9154_CHIPTYPE)))
-        print("{:x}".format(self.read(AD9154_PRODIDL)))
-        print("{:x}".format(self.read(AD9154_PRODIDH)))
         return errors == 0
 
     def reset(self):
@@ -77,21 +74,11 @@ class AD9154(AD9154SPI):
             AD9154_ADDRINC_SET(0) |
             AD9154_SDOACTIVE_SET(1))
 
-    def startup(self, jesd_settings, linerate, physical_lanes=0xf0):
+    def startup(self, jesd_settings, linerate):
         # follow device startup guide (p25 of ad9154 datasheet)
 
-        logical_lanes = {
-            0xf0 : 0x0f,
-            0x0f : 0x0f,
-            0xff : 0xff
-        }[physical_lanes]
-
-        # see ad9154 fmc schematic...
-        polarity_lanes = {
-            0xf0 : 0x00,
-            0x0f : 0x0f,
-            0xff : 0x0f
-        }[physical_lanes]
+        logical_lanes = 0xff
+        polarity_lanes = 0x00
 
         # step 1: start up the dac
 
@@ -176,7 +163,7 @@ class AD9154(AD9154SPI):
         chksum = jesd_settings.get_configuration_checksum()
 
         self.write(AD9154_MASTER_PD, 0x00)
-        self.write(AD9154_PHY_PD, ~physical_lanes) # power down physical lanes
+        self.write(AD9154_PHY_PD, 0x00) # power down physical lanes
         self.write(AD9154_GENERAL_JRX_CTRL_0,
             AD9154_LINK_EN_SET(0) | AD9154_LINK_PAGE_SET(0) |
             AD9154_LINK_MODE_SET(0) | AD9154_CHECKSUM_MODE_SET(0))
@@ -296,45 +283,18 @@ class AD9154(AD9154SPI):
             AD9154_SYNCMODE_SET(1) | AD9154_SYNCENABLE_SET(1) |
             AD9154_SYNCARM_SET(1))
 
-        if physical_lanes == 0xff:
-            self.write(AD9154_XBAR_LN_0_1,
-                AD9154_LOGICAL_LANE0_SRC_SET(7) |
-                AD9154_LOGICAL_LANE1_SRC_SET(6))
-            self.write(AD9154_XBAR_LN_2_3,
-                AD9154_LOGICAL_LANE2_SRC_SET(5) |
-                AD9154_LOGICAL_LANE3_SRC_SET(4))
-            self.write(AD9154_XBAR_LN_4_5,
-                AD9154_LOGICAL_LANE4_SRC_SET(3) |
-                AD9154_LOGICAL_LANE5_SRC_SET(2))
-            self.write(AD9154_XBAR_LN_6_7,
-                AD9154_LOGICAL_LANE6_SRC_SET(1) |
-                AD9154_LOGICAL_LANE7_SRC_SET(0))
-        elif physical_lanes == 0xf0:
-            self.write(AD9154_XBAR_LN_0_1,
-                AD9154_LOGICAL_LANE0_SRC_SET(7) |
-                AD9154_LOGICAL_LANE1_SRC_SET(6))
-            self.write(AD9154_XBAR_LN_2_3,
-                AD9154_LOGICAL_LANE2_SRC_SET(5) |
-                AD9154_LOGICAL_LANE3_SRC_SET(4))
-            self.write(AD9154_XBAR_LN_4_5,
-                AD9154_LOGICAL_LANE4_SRC_SET(0) |
-                AD9154_LOGICAL_LANE5_SRC_SET(0))
-            self.write(AD9154_XBAR_LN_6_7,
-                AD9154_LOGICAL_LANE6_SRC_SET(0) |
-                AD9154_LOGICAL_LANE7_SRC_SET(0))
-        elif physical_lanes == 0x0f:
-            self.write(AD9154_XBAR_LN_0_1,
-                AD9154_LOGICAL_LANE0_SRC_SET(3) |
-                AD9154_LOGICAL_LANE1_SRC_SET(2))
-            self.write(AD9154_XBAR_LN_2_3,
-                AD9154_LOGICAL_LANE2_SRC_SET(1) |
-                AD9154_LOGICAL_LANE3_SRC_SET(0))
-            self.write(AD9154_XBAR_LN_4_5,
-                AD9154_LOGICAL_LANE4_SRC_SET(0) |
-                AD9154_LOGICAL_LANE5_SRC_SET(0))
-            self.write(AD9154_XBAR_LN_6_7,
-                AD9154_LOGICAL_LANE6_SRC_SET(0) |
-                AD9154_LOGICAL_LANE7_SRC_SET(0))
+        self.write(AD9154_XBAR_LN_0_1,
+            AD9154_LOGICAL_LANE0_SRC_SET(0) |
+            AD9154_LOGICAL_LANE1_SRC_SET(1))
+        self.write(AD9154_XBAR_LN_2_3,
+            AD9154_LOGICAL_LANE2_SRC_SET(2) |
+            AD9154_LOGICAL_LANE3_SRC_SET(3))
+        self.write(AD9154_XBAR_LN_4_5,
+            AD9154_LOGICAL_LANE4_SRC_SET(4) |
+            AD9154_LOGICAL_LANE5_SRC_SET(5))
+        self.write(AD9154_XBAR_LN_6_7,
+            AD9154_LOGICAL_LANE6_SRC_SET(6) |
+            AD9154_LOGICAL_LANE7_SRC_SET(7))
         self.write(AD9154_JESD_BIT_INVERSE_CTRL, polarity_lanes)
         self.write(AD9154_GENERAL_JRX_CTRL_0,
             AD9154_LINK_EN_SET(1) | AD9154_LINK_PAGE_SET(0) |

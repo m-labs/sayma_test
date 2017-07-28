@@ -21,13 +21,15 @@ def load_sayma_rtm():
 
 def main():
     if len(sys.argv) < 2:
-        print("missing sayma board (amc or rtm)")
+        print("missing sayma board (amc, rtm or both)")
         exit()
     if sys.argv[1] == "amc":
         load_sayma_amc()
     elif sys.argv[1] == "rtm":
         load_sayma_rtm()
-
+    elif sys.argv[1] == "both":
+        load_sayma_rtm()
+        load_sayma_amc()
 
 if __name__ == "__main__":
     main()

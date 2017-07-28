@@ -48,6 +48,16 @@ _io = [
     ("user_led", 2, Pins("AJ13"), IOStandard("LVCMOS18")),
     ("user_led", 3, Pins("AE13"), IOStandard("LVCMOS18")),
 
+    # ios
+    ("user_io", 0, Pins("AG11"), IOStandard("LVCMOS18")),
+    ("user_io", 1, Pins("AH11"), IOStandard("LVCMOS18")),
+    ("user_io", 2, Pins("AJ11"), IOStandard("LVCMOS18")),
+    ("user_io", 3, Pins("AG12"), IOStandard("LVCMOS18")),
+    ("user_io", 4, Pins("AH12"), IOStandard("LVCMOS18")),
+    ("user_io", 5, Pins("AD11"), IOStandard("LVCMOS18")),
+    ("user_io", 6, Pins("AE11"), IOStandard("LVCMOS18")),
+    ("user_io", 7, Pins("AE12"), IOStandard("LVCMOS18")),
+
     # serial
     ("serial", 0,
         Subsignal("tx", Pins("AK8")),
@@ -391,7 +401,9 @@ def get_phy_pads(jesd_pads, n):
 
 class JESDTestSoC(SoCCore):
     csr_map = {
-        "control": 20
+        "dac0_control": 20,
+        "dac1_control": 21,
+        "analyzer": 30
     }
     csr_map.update(SoCCore.csr_map)
 
@@ -442,52 +454,64 @@ class JESDTestSoC(SoCCore):
         ]
         platform.add_period_constraint(self.cd_jesd.clk, 1e9/refclk_freq)
 
-        jesd_pads = platform.request("dac_jesd", dac)
-        phys = []
-        for i in range(len(jesd_pads.txp)):
-            if i%4 == 0:
-                qpll = JESD204BGTHQuadPLL(self.refclk, refclk_freq, linerate)
-                self.submodules += qpll
-                print(qpll)
+        for dac in range(2):
+            jesd_pads = platform.request("dac_jesd", dac)
+            phys = []
+            for i in range(len(jesd_pads.txp)):
+                if i%4 == 0:
+                    qpll = JESD204BGTHQuadPLL(self.refclk, refclk_freq, linerate)
+                    self.submodules += qpll
+                    print(qpll)
+    
+                phy = LiteJESD204BPhyTX(
+                    qpll, get_phy_pads(jesd_pads, i), self.clk_freq,
+                    transceiver="gth")
+                #self.comb += phy.transmitter.produce_square_wave.eq(1)
+                platform.add_period_constraint(phy.transmitter.cd_tx.clk, 40*1e9/linerate)
+                platform.add_false_path_constraints(
+                    self.crg.cd_sys.clk,
+                    self.cd_jesd.clk,
+                    phy.transmitter.cd_tx.clk)
+                phys.append(phy)
+            to_jesd = ClockDomainsRenamer("jesd")
+            core = to_jesd(LiteJESD204BCoreTX(phys, settings, converter_data_width=64))
+            control = to_jesd(LiteJESD204BCoreTXControl(core))
+            setattr(self.submodules, "dac"+str(dac)+"_core", core)
+            setattr(self.submodules, "dac"+str(dac)+"_control", control)           
+            core.register_jsync(platform.request("dac_sync", dac))
+    
+            # jesd pattern (ramp)
+            data0 = Signal(16)
+            data1 = Signal(16)
+            data2 = Signal(16)
+            data3 = Signal(16)
+            self.sync.jesd += [
+                data0.eq(data0 + 4096),   # freq = dacclk/32
+                data1.eq(data1 + 8192),   # freq = dacclk/16
+                data2.eq(data2 + 16384),  # freq = dacclk/8
+                data3.eq(data3 + 32768)   # freq = dacclk/4
+            ]
+            self.comb += [
+                core.sink.converter0.eq(Cat(data0, data0)),
+                core.sink.converter1.eq(Cat(data1, data1)),
+                core.sink.converter2.eq(Cat(data2, data2)),
+                core.sink.converter3.eq(Cat(data3, data3))
+            ]
+            
+        jesd_dac0_phy0_counter = Signal(32)
+        self.sync.dac0_core_phy0_tx += jesd_dac0_phy0_counter.eq(jesd_dac0_phy0_counter + 1)
+        self.comb += platform.request("user_led", 0).eq(jesd_dac0_phy0_counter[26])
+        self.comb += platform.request("user_led", 1).eq(self.dac0_core.jsync)
 
-            phy = LiteJESD204BPhyTX(
-                qpll, get_phy_pads(jesd_pads, i), self.clk_freq,
-                transceiver="gth")
-            #self.comb += phy.transmitter.produce_square_wave.eq(1)
-            platform.add_period_constraint(phy.transmitter.cd_tx.clk, 40*1e9/linerate)
-            platform.add_false_path_constraints(
-                self.crg.cd_sys.clk,
-                self.cd_jesd.clk,
-                phy.transmitter.cd_tx.clk)
-            phys.append(phy)
-        to_jesd = ClockDomainsRenamer("jesd")
-        self.submodules.core = to_jesd(LiteJESD204BCoreTX(phys, settings,
-                                                      converter_data_width=64))
-        self.submodules.control = to_jesd(LiteJESD204BCoreTXControl(self.core))
-        self.core.register_jsync(platform.request("dac_sync", dac))
+        jesd_dac1_phy0_counter = Signal(32)
+        self.sync.dac1_core_phy0_tx += jesd_dac1_phy0_counter.eq(jesd_dac1_phy0_counter + 1)
+        self.comb += platform.request("user_led", 2).eq(jesd_dac1_phy0_counter[26])
+        self.comb += platform.request("user_led", 3).eq(self.dac1_core.jsync)
 
-        # jesd pattern (ramp)
-        data0 = Signal(16)
-        data1 = Signal(16)
-        data2 = Signal(16)
-        data3 = Signal(16)
-        self.sync.jesd += [
-            data0.eq(data0 + 4096),   # freq = dacclk/32
-            data1.eq(data1 + 8192),   # freq = dacclk/16
-            data2.eq(data2 + 16384),  # freq = dacclk/8
-            data3.eq(data3 + 32768)   # freq = dacclk/4
-        ]
-        self.comb += [
-            self.core.sink.converter0.eq(Cat(data0, data0)),
-            self.core.sink.converter1.eq(Cat(data1, data1)),
-            self.core.sink.converter2.eq(Cat(data2, data2)),
-            self.core.sink.converter3.eq(Cat(data3, data3))
-        ]
-        
-        jesd_counter = Signal(32)
-        self.sync.phy0_tx += jesd_counter.eq(jesd_counter + 1)
-        self.comb += platform.request("user_led", 0).eq(jesd_counter[26])
-        self.comb += platform.request("user_led", 1).eq(self.core.jsync)
+        # output divided phy0_tx clock on user io (should be 125MHz)
+        phy0_tx_div2 = Signal()
+        self.sync.dac0_core_phy0_tx += phy0_tx_div2.eq(~phy0_tx_div2)
+        self.comb += platform.request("user_io", 0).eq(phy0_tx_div2)
 
     def do_exit(self, vns):
         pass
