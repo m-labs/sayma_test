@@ -18,5 +18,5 @@ litex_server uart [sayma_rtm_com_port]
 cd test/sayma_both
 python3 test_identifier.py / to verify the 2 fpgas are correctly loaded and we are able to communicate with them
 python3 test_clocking.py / to configure hmc830 and hmd7043 from a 125MHz clock input
-python3 test_dac0.py / test dac0
-python3 test_dac1.py / test dac1
+python3 test_dac0.py / test dac0 prbs
+python3 test_dac1.py / test dac1 prbs

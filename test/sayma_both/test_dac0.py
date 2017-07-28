@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 
 from litex.soc.tools.remote import RemoteClient
 
@@ -44,6 +45,24 @@ time.sleep(1)
 
 # show dac0 status
 dac0.print_status()
+
+# prbs test
+if len(sys.argv) > 1:
+    if sys.argv[1] == "prbs":
+        fpga_prbs_configs = {
+            "prbs7" : 0b01,
+            "prbs15": 0b10,
+            "prbs31": 0b11
+        }
+        for prbs in ["prbs7", "prbs15", "prbs31"]:
+            # configure prbs on fpga
+            wb_amc.regs.dac0_control_prbs_config.write(fpga_prbs_configs[prbs])
+            # prbs test on ad9154
+            status, errors = dac0.prbs_test(prbs, 100)
+            print("{:s} test status: {:02x}".format(prbs, status))
+            print("-"*40)
+            for i in range(8):
+                print("-lane{:d}: {:d} errors".format(i, errors[i]))
 
 # # #
 
