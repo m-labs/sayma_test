@@ -4,7 +4,7 @@ from litex.soc.tools.remote import RemoteClient
 
 from libbase.hmc import *
 
-from clocking_config import hmc830_config, hmc7043_config
+from clocking_config import hmc830_config, hmc7043_config_5gbps, hmc7043_config_10gbps
 
 wb_amc = RemoteClient(port=1234, csr_csv="../sayma_amc/csr.csv", debug=False)
 wb_rtm = RemoteClient(port=1235, csr_csv="../sayma_rtm/csr.csv", debug=False)
@@ -23,7 +23,7 @@ for addr, data in hmc830_config:
     hmc830.write(addr, data)
 
 # configure hmc7043
-for addr, data in hmc7043_config:
+for addr, data in hmc7043_config_10gbps:
     hmc7043.write(addr, data)
 
 # # #

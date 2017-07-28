@@ -20,6 +20,7 @@ jesd_settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
 
 # reset dacs
 wb_rtm.regs.dac_reset_out.write(0)
+time.sleep(1)
 wb_rtm.regs.dac_reset_out.write(1)
 
 time.sleep(1)
