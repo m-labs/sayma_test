@@ -1,0 +1,22 @@
+JESD204B test:
+
+[> Build
+---------
+python3 litex_setup.py init
+python3 litex_setup.py install
+python3 sayma_amc jesd
+python3 sayma_rtm jesd
+
+[> Load
+---------
+python3 load.py both
+
+[> Script
+---------
+litex_server uart [sayma_amc_com_port]
+litex_server uart [sayma_rtm_com_port]
+cd test/sayma_both
+python3 test_identifier.py / to verify the 2 fpgas are correctly loaded and we are able to communicate with them
+python3 test_clocking.py / to configure hmc830 and hmd7043 from a 125MHz clock input
+python3 test_dac0.py / test dac0
+python3 test_dac1.py / test dac1
