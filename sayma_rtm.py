@@ -67,9 +67,9 @@ _io = [
 
     # dac 1
     ("dac1_spi", 0,
-        Subsignal("clk", Pins("J18")),
+        Subsignal("clk", Pins("J15")),
         Subsignal("cs_n", Pins("K18")),
-        Subsignal("mosi", Pins("J15")),
+        Subsignal("mosi", Pins("J18")),
         Subsignal("miso", Pins("J16")),
         IOStandard("LVCMOS25")
     ),
