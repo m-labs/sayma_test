@@ -3,7 +3,7 @@
 from litex.gen import *
 
 import sys
-sys.path.append("../gateware/")
+sys.path.append("../../gateware/")
 
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
