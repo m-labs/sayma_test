@@ -85,15 +85,16 @@ static void reboot(void)
 static void amc_rtm_link_init(void)
 {
 	amc_rtm_link_control_reset_write(1);
-	while ((amc_rtm_link_control_ready_read() & 0x1) == 0);
-	printf("delay_min: %d\n"
-		   "delay_max: %d\n"
+	while ((amc_rtm_link_control_ready_read() & 0x1) == 0 |
+		   (amc_rtm_link_control_error_read() & 0x1) == 0);
+	printf("delay_found: %d\n"
 		   "delay: %d\n"
+		   "bitslip_found: %d\n"
 		   "bitslip: %d\n"
 		   "ready: %d\n",
-		    amc_rtm_link_control_delay_min_read(),
-		    amc_rtm_link_control_delay_max_read(),
+		    amc_rtm_link_control_delay_found_read(),
 		    amc_rtm_link_control_delay_read(),
+		    amc_rtm_link_control_bitslip_found_read(),
 		    amc_rtm_link_control_bitslip_read(),
 		    amc_rtm_link_control_ready_read());
 }

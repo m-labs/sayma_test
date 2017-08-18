@@ -22,7 +22,6 @@ from amc_rtm_link.phy import SerdesMasterInit, SerdesControl
 from amc_rtm_link import packet
 from amc_rtm_link import etherbone
 
-from gateware import firmware
 
 _io = [
     # clock
