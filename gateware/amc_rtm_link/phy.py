@@ -16,7 +16,7 @@ class PhaseDetector(Module, AutoCSR):
 
         # # #
 
-        # ideal sampling (middle of the eye):
+        # Ideal sampling (middle of the eye):
         #  _____       _____       _____
         # |     |_____|     |_____|     |_____|   data
         #    +     +     +     +     +     +      master sampling
@@ -29,7 +29,7 @@ class PhaseDetector(Module, AutoCSR):
         # |     |_____|     |_____|     |_____|   data
         #     +     +     +     +     +     +     master sampling
         #        -     -     -     -     -     -  slave sampling (90°/bit period)
-        # on mdata transition, mdata != sdata
+        # On mdata transition, mdata != sdata
         #
         #
         # 2) too early sampling (idelay needs to be incremented):
@@ -37,25 +37,25 @@ class PhaseDetector(Module, AutoCSR):
         # |     |_____|     |_____|     |_____|   data
         #   +     +     +     +     +     +       master sampling
         #      -     -     -     -     -     -    slave sampling (90°/bit period)
-        # on mdata transition, mdata == sdata
+        # On mdata transition, mdata == sdata
 
         transition = Signal()
         inc = Signal()
         dec = Signal()
 
-        # find transition
+        # Find transition
         mdata_d = Signal(8)
         self.sync.serdes_5x += mdata_d.eq(self.mdata)
         self.comb += transition.eq(mdata_d != self.mdata)
 
 
-        # find what to do
+        # Find what to do
         self.comb += [
             inc.eq(transition & (self.mdata == self.sdata)),
             dec.eq(transition & (self.mdata != self.sdata))
         ]
 
-        # error accumulator
+        # Error accumulator
         lateness = Signal(nbits, reset=2**(nbits - 1))
         too_late = Signal()
         too_early = Signal()
@@ -85,13 +85,13 @@ class PhaseDetector(Module, AutoCSR):
         ]
 
 
-# serdes master <--> slave synchronization:
-# 1) master sends idle pattern (zeroes) to reset slave.
-# 2) master sends K28.5 commas to allow slave to synchronize, slave sends idle pattern.
-# 3) slave sends K28.5 commas to allow master to synchronize, master sends K28.5 commas.
-# 4) master stops sending K28.5 commas.
-# 5) slave stops sending K25.5 commas.
-# 6) link is ready.
+# Master <--> Slave synchronization:
+# 1) Master sends idle pattern (zeroes) to reset Slave.
+# 2) Master sends K28.5 commas to allow Slave to calibrate, Slave sends idle pattern.
+# 3) Slave sends K28.5 commas to allow Master to calibrate, Master sends K28.5 commas.
+# 4) Master stops sending K28.5 commas.
+# 5) Slave stops sending K25.5 commas.
+# 6) Link is ready.
 
 class SerdesMasterInit(Module):
     def __init__(self, serdes, taps):
@@ -152,7 +152,7 @@ class SerdesMasterInit(Module):
             serdes.tx_comma.eq(1)
         )
         fsm.act("CHECK_PHASE",
-            # since we are always incrementing delay,
+            # Since we are always incrementing delay,
             # ideal sampling  is found when phase detector
             # transitions from too_early to too_late
             If(serdes.phase_detector.too_late & 
@@ -254,7 +254,7 @@ class SerdesSlaveInit(Module, AutoCSR):
             serdes.tx_idle.eq(1)
         )
         fsm.act("CHECK_PHASE",
-            # since we are always incrementing delay,
+            # Since we are always incrementing delay,
             # ideal sampling  is found when phase detector
             # transitions from too_early to too_late
             If(serdes.phase_detector.too_late & 

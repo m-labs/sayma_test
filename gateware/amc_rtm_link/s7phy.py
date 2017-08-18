@@ -88,11 +88,12 @@ class S7Serdes(Module):
             Decoder(True)) for _ in range(4)]
         self.submodules += self.decoders
 
-        # clocking
-        # master mode:
+        # clocking:
+
+        # In master mode:
         # - linerate/10 pll refclk provided by user
         # - linerate/10 slave refclk generated on clk_pads
-        # slave mode:
+        # In Slave mode:
         # - linerate/10 pll refclk provided by clk_pads
         self.clock_domains.cd_serdes = ClockDomain()
         self.clock_domains.cd_serdes_5x = ClockDomain()
@@ -149,7 +150,8 @@ class S7Serdes(Module):
                 )
             ]
 
-        # tx data
+        # tx datapath
+        # tx_data -> encoders -> gearbox -> serdes
         self.submodules.tx_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
         self.comb += [
             If(tx_comma,
@@ -214,13 +216,14 @@ class S7Serdes(Module):
                 self.specials += Instance("BUFG", i_I=clk_i, o_O=clk_i_bufg)
             self.comb += pll.refclk.eq(clk_i_bufg)
 
-        # rx data
+        # rx datapath
+        # serdes -> gearbox -> bitslip -> decoders -> rx_data
         self.submodules.rx_gearbox = Gearbox(8, "serdes_5x", 40, "serdes")
         self.submodules.rx_bitslip = ClockDomainsRenamer("serdes")(BitSlip(40))
 
         self.submodules.phase_detector = ClockDomainsRenamer("serdes_5x")(PhaseDetector())
 
-        # use 2 serdes for phase detection: 1 master / 1 slave
+        # 2 serdes for phase detection: 1 master (used for data) / 1 slave
         serdes_m_i_nodelay = Signal()
         serdes_s_i_nodelay = Signal()
         self.specials += [
