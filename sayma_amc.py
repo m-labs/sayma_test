@@ -394,7 +394,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             amc_rtm_link_rx_cdc.sink.data.eq(amc_rtm_link_serdes.rx_data),
             amc_rtm_link_rx_cdc.source.connect(amc_rtm_link_depacketizer.sink),
         ]
-        self.add_wb_slave(mem_decoder(self.mem_map["amc_rtm_link"]), amc_rtm_link_etherbone.wishbone.bus)
+        self.add_wb_slave(self.mem_map["amc_rtm_link"], 8192, amc_rtm_link_etherbone.wishbone.bus)
 
 
 def main():
