@@ -5,6 +5,13 @@ import sys
 from litex.build.xilinx import VivadoProgrammer
 
 
+def load_clkgen():
+    prog = VivadoProgrammer()
+    prog.load_bitstream(
+        bitstream_file="build_clkgen/gateware/top.bit",
+        target="localhost:3121/xilinx_tcf/Digilent/210203336949A")
+
+
 def load_sayma_amc():
     prog = VivadoProgrammer()
     prog.load_bitstream(
@@ -21,13 +28,15 @@ def load_sayma_rtm():
 
 def main():
     if len(sys.argv) < 2:
-        print("missing sayma board (amc, rtm or both)")
+        print("missing sayma board (clkgen, sayma_amc, sayma_rtm or sayma)")
         exit()
-    if sys.argv[1] == "amc":
+    if sys.argv[1] == "clkgen":
+    	load_clkgen()
+    elif sys.argv[1] == "sayma_amc":
         load_sayma_amc()
-    elif sys.argv[1] == "rtm":
+    elif sys.argv[1] == "sayma_rtm":
         load_sayma_rtm()
-    elif sys.argv[1] == "both":
+    elif sys.argv[1] == "sayma":
         load_sayma_rtm()
         load_sayma_amc()
 
