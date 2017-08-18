@@ -245,9 +245,8 @@ class KUSSerdes(Module):
             Instance("IDELAYE3",
                 p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                # Note: can't use TIME mode since not reloading DELAY_VALUE on rst...
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=50, # 1/4 bit period (ambient temp)
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
 
                 i_CLK=ClockSignal("serdes_5x"),
                 i_RST=rx_delay_rst, i_LOAD=0,
@@ -277,7 +276,7 @@ class KUSSerdes(Module):
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
                 # Note: can't use TIME mode since not reloading DELAY_VALUE on rst...
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=100, # 1/2 bit period (ambient temp)
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=50, # 1/4 bit period (ambient temp)
 
                 i_CLK=ClockSignal("serdes_5x"),
                 i_RST=rx_delay_rst, i_LOAD=0,
