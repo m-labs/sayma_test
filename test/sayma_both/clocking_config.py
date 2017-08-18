@@ -1,5 +1,5 @@
-# hmc830 config, 125MHz input, 1GHz output
-# fvco = refclk / r_divider * n_divider
+# hmc830 config, 100MHz input, 1GHz output
+# fvco = (refclk / r_divider) * n_divider
 # fout = fvco/2 
 hmc830_config = [
     (0x0, 0x20),
@@ -17,7 +17,7 @@ hmc830_config = [
     (0xa, 0x2046),
     (0xb, 0x7c061),
     (0xf, 0x81),
-    (0x3, 0x20), # n_divider
+    (0x3, 0x28), # n_divider
 ]
 
 # hmc7043 config:
