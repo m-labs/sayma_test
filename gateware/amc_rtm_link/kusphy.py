@@ -89,11 +89,12 @@ class KUSSerdes(Module):
             Decoder(True)) for _ in range(4)]
         self.submodules += self.decoders
 
-        # clocking
-        # master mode:
+        # clocking:
+
+        # In master mode:
         # - linerate/10 pll refclk provided by user
         # - linerate/10 slave refclk generated on clk_pads
-        # slave mode:
+        # In Slave mode:
         # - linerate/10 pll refclk provided by clk_pads
         self.clock_domains.cd_serdes = ClockDomain()
         self.clock_domains.cd_serdes_5x = ClockDomain()
@@ -161,7 +162,8 @@ class KUSSerdes(Module):
                 )
             ]
 
-        # tx data
+        # tx datapath
+        # tx_data -> encoders -> gearbox -> serdes
         self.submodules.tx_gearbox = Gearbox(40, "serdes", 8, "serdes_5x")
         self.comb += [
             If(tx_comma,
@@ -221,13 +223,14 @@ class KUSSerdes(Module):
                 self.specials += Instance("BUFG", i_I=clk_i, o_O=clk_i_bufg)
             self.comb += pll.refclk.eq(clk_i_bufg)
 
-        # rx data
+        # rx datapath
+        # serdes -> gearbox -> bitslip -> decoders -> rx_data
         self.submodules.rx_gearbox = Gearbox(8, "serdes_5x", 40, "serdes")
         self.submodules.rx_bitslip = ClockDomainsRenamer("serdes")(BitSlip(40))
 
         self.submodules.phase_detector = ClockDomainsRenamer("serdes_5x")(PhaseDetector())
 
-        # use 2 serdes for phase detection: 1 master / 1 slave
+        # 2 serdes for phase detection: 1 master (used for data) / 1 slave
         serdes_m_i_nodelay = Signal()
         serdes_s_i_nodelay = Signal()
         self.specials += [
@@ -245,9 +248,8 @@ class KUSSerdes(Module):
             Instance("IDELAYE3",
                 p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
-                # Note: can't use TIME mode since not reloading DELAY_VALUE on rst...
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=50, # 1/4 bit period (ambient temp)
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=0,
 
                 i_CLK=ClockSignal("serdes_5x"),
                 i_RST=rx_delay_rst, i_LOAD=0,
@@ -276,8 +278,10 @@ class KUSSerdes(Module):
                 p_CASCADE="NONE", p_UPDATE_MODE="ASYNC", p_REFCLK_FREQUENCY=200.0,
                 p_IS_CLK_INVERTED=0, p_IS_RST_INVERTED=0,
                 # Note: can't use TIME mode since not reloading DELAY_VALUE on rst...
+				# Got answer from Xilinx, need testing:
+                # https://forums.xilinx.com/xlnx/board/crawl_message?board.id=ultrascale&message.id=4699
                 p_DELAY_FORMAT="COUNT", p_DELAY_SRC="IDATAIN",
-                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=100, # 1/2 bit period (ambient temp)
+                p_DELAY_TYPE="VARIABLE", p_DELAY_VALUE=50, # 1/4 bit period (ambient temp)
 
                 i_CLK=ClockSignal("serdes_5x"),
                 i_RST=rx_delay_rst, i_LOAD=0,

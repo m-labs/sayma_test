@@ -10,12 +10,13 @@ class PhaseDetector(Module, AutoCSR):
         self.mdata = Signal(8)
         self.sdata = Signal(8)
 
-        self.reset = CSR()
-        self.status = CSRStatus(2)
+        self.reset = Signal()
+        self.too_early = Signal()
+        self.too_late = Signal()
 
         # # #
 
-        # ideal sampling (middle of the eye):
+        # Ideal sampling (middle of the eye):
         #  _____       _____       _____
         # |     |_____|     |_____|     |_____|   data
         #    +     +     +     +     +     +      master sampling
@@ -28,7 +29,7 @@ class PhaseDetector(Module, AutoCSR):
         # |     |_____|     |_____|     |_____|   data
         #     +     +     +     +     +     +     master sampling
         #        -     -     -     -     -     -  slave sampling (90°/bit period)
-        # on mdata transition, mdata != sdata
+        # On mdata transition, mdata != sdata
         #
         #
         # 2) too early sampling (idelay needs to be incremented):
@@ -36,25 +37,25 @@ class PhaseDetector(Module, AutoCSR):
         # |     |_____|     |_____|     |_____|   data
         #   +     +     +     +     +     +       master sampling
         #      -     -     -     -     -     -    slave sampling (90°/bit period)
-        # on mdata transition, mdata == sdata
+        # On mdata transition, mdata == sdata
 
         transition = Signal()
         inc = Signal()
         dec = Signal()
 
-        # find transition
+        # Find transition
         mdata_d = Signal(8)
         self.sync.serdes_5x += mdata_d.eq(self.mdata)
         self.comb += transition.eq(mdata_d != self.mdata)
 
 
-        # find what to do
+        # Find what to do
         self.comb += [
             inc.eq(transition & (self.mdata == self.sdata)),
             dec.eq(transition & (self.mdata != self.sdata))
         ]
 
-        # error accumulator
+        # Error accumulator
         lateness = Signal(nbits, reset=2**(nbits - 1))
         too_late = Signal()
         too_early = Signal()
@@ -73,21 +74,24 @@ class PhaseDetector(Module, AutoCSR):
         ]
 
         # control / status cdc
-        self.specials += MultiReg(Cat(too_late, too_early), self.status.status)
+        self.specials += [
+            MultiReg(too_early, self.too_early),
+            MultiReg(too_late, self.too_late)
+        ]
         self.submodules.do_reset_lateness = PulseSynchronizer("sys", "serdes_5x")
         self.comb += [
             reset_lateness.eq(self.do_reset_lateness.o),
-            self.do_reset_lateness.i.eq(self.reset.re)
+            self.do_reset_lateness.i.eq(self.reset)
         ]
 
 
-# serdes master <--> slave synchronization:
-# 1) master sends idle pattern (zeroes) to reset slave.
-# 2) master sends K28.5 commas to allow slave to synchronize, slave sends idle pattern.
-# 3) slave sends K28.5 commas to allow master to synchronize, master sends K28.5 commas.
-# 4) master stops sending K28.5 commas.
-# 5) slave stops sending K25.5 commas.
-# 6) link is ready.
+# Master <--> Slave synchronization:
+# 1) Master sends idle pattern (zeroes) to reset Slave.
+# 2) Master sends K28.5 commas to allow Slave to calibrate, Slave sends idle pattern.
+# 3) Slave sends K28.5 commas to allow Master to calibrate, Master sends K28.5 commas.
+# 4) Master stops sending K28.5 commas.
+# 5) Slave stops sending K25.5 commas.
+# 6) Link is ready.
 
 class SerdesMasterInit(Module):
     def __init__(self, serdes, taps):
@@ -98,26 +102,25 @@ class SerdesMasterInit(Module):
         # # #
 
         self.delay = delay = Signal(max=taps)
-        self.delay_min = delay_min = Signal(max=taps)
-        self.delay_min_found = delay_min_found = Signal()
-        self.delay_max = delay_max = Signal(max=taps)
-        self.delay_max_found = delay_max_found = Signal()
+        self.delay_found = delay_found = Signal()
         self.bitslip = bitslip = Signal(max=40)
+        self.bitslip_found = bitslip_found = Signal()
 
-        timer = WaitTimer(1024)
+        timer = WaitTimer(8192)
         self.submodules += timer
 
         self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
         self.comb += self.fsm.reset.eq(self.reset)
 
+        phase_detector_too_early_last = Signal()
+
         fsm.act("IDLE",
+            NextValue(delay_found, 0),
             NextValue(delay, 0),
-            NextValue(delay_min, 0),
-            NextValue(delay_min_found, 0),
-            NextValue(delay_max, 0),
-            NextValue(delay_max_found, 0),
             serdes.rx_delay_rst.eq(1),
+            NextValue(bitslip_found, 0),
             NextValue(bitslip, 0),
+            NextValue(phase_detector_too_early_last, 0),
             NextState("RESET_SLAVE"),
             serdes.tx_idle.eq(1)
         )
@@ -139,75 +142,61 @@ class SerdesMasterInit(Module):
             timer.wait.eq(1),
             If(timer.done,
                 timer.wait.eq(0),
+                serdes.phase_detector.reset.eq(1),
+                If(~delay_found,
+                    NextState("CHECK_PHASE")
+                ).Else(
+                    NextState("CHECK_PATTERN")
+                ),
+            ),
+            serdes.tx_comma.eq(1)
+        )
+        fsm.act("CHECK_PHASE",
+            # Since we are always incrementing delay,
+            # ideal sampling  is found when phase detector
+            # transitions from too_early to too_late
+            If(serdes.phase_detector.too_late & 
+                phase_detector_too_early_last,
+                NextValue(delay_found, 1),
                 NextState("CHECK_PATTERN")
+            ).Elif(serdes.phase_detector.too_late |
+                   serdes.phase_detector.too_early,
+                NextValue(phase_detector_too_early_last, 
+                          serdes.phase_detector.too_early),
+                NextState("INC_DELAY")
             ),
             serdes.tx_comma.eq(1)
         )
-        fsm.act("CHECK_PATTERN",
-            If(~delay_min_found,
-                If(serdes.rx_comma,
-                    timer.wait.eq(1),
-                    If(timer.done,
-                        NextValue(delay_min, delay),
-                        NextValue(delay_min_found, 1)
-                    )
-                ).Else(
-                    NextState("INC_DELAY_BITSLIP")
-                ),
-            ).Else(
-                If(~serdes.rx_comma,
-                    NextValue(delay_max, delay),
-                    NextValue(delay_max_found, 1),
-                    NextState("RESET_SAMPLING_WINDOW")
-                ).Else(
-                    NextState("INC_DELAY_BITSLIP")
-                )
-            ),
-            serdes.tx_comma.eq(1)
-        )
-        self.comb += serdes.rx_bitslip_value.eq(bitslip)
-        fsm.act("INC_DELAY_BITSLIP",
-            NextState("WAIT_STABLE"),
+        fsm.act("INC_DELAY",
             If(delay == (taps - 1),
-                If(delay_min_found,
-                    NextState("ERROR")
-                ),
-                If(bitslip == (40 - 1),
-                    NextValue(bitslip, 0)
-                ).Else(    
-                    NextValue(bitslip, bitslip + 1)
-                ),
-                NextValue(delay, 0),
-                serdes.rx_delay_rst.eq(1)
-            ).Else(
-                NextValue(delay, delay + 1),
-                serdes.rx_delay_inc.eq(1),
-                serdes.rx_delay_ce.eq(1)
-            ),
-            serdes.tx_comma.eq(1)
-        )
-        fsm.act("RESET_SAMPLING_WINDOW",
-            NextValue(delay, 0),
-            serdes.rx_delay_rst.eq(1),
-            NextState("WAIT_SAMPLING_WINDOW"),
-            serdes.tx_comma.eq(1)
-        )
-        fsm.act("CONFIGURE_SAMPLING_WINDOW",
-            If(delay == (delay_min + (delay_max - delay_min)[1:]),
-                NextState("READY")
+                NextState("ERROR")
             ).Else(
                 NextValue(delay, delay + 1),
                 serdes.rx_delay_inc.eq(1),
                 serdes.rx_delay_ce.eq(1),
-                NextState("WAIT_SAMPLING_WINDOW")
+                NextState("WAIT_STABLE")
             ),
             serdes.tx_comma.eq(1)
         )
-        fsm.act("WAIT_SAMPLING_WINDOW",
-            timer.wait.eq(1),
-            If(timer.done,
-                timer.wait.eq(0),
-                NextState("CONFIGURE_SAMPLING_WINDOW")
+        fsm.act("CHECK_PATTERN",
+            If(serdes.rx_comma,
+                timer.wait.eq(1),
+                If(timer.done,
+                    NextValue(bitslip_found, 1),
+                    NextState("READY")
+                )
+            ).Else(
+                NextState("INC_BITSLIP")
+            ),
+            serdes.tx_comma.eq(1)
+        )
+        self.comb += serdes.rx_bitslip_value.eq(bitslip)
+        fsm.act("INC_BITSLIP",
+            If(bitslip == (40 - 1),
+                NextState("ERROR")
+            ).Else(
+                NextValue(bitslip, bitslip + 1),
+                NextState("WAIT_STABLE")
             ),
             serdes.tx_comma.eq(1)
         )
@@ -228,11 +217,9 @@ class SerdesSlaveInit(Module, AutoCSR):
         # # #
 
         self.delay = delay = Signal(max=taps)
-        self.delay_min = delay_min = Signal(max=taps)
-        self.delay_min_found = delay_min_found = Signal()
-        self.delay_max = delay_max = Signal(max=taps)
-        self.delay_max_found = delay_max_found = Signal()
+        self.delay_found = delay_found = Signal()
         self.bitslip = bitslip = Signal(max=40)
+        self.bitslip_found = bitslip_found = Signal()
 
         timer = WaitTimer(1024)
         self.submodules += timer
@@ -240,14 +227,16 @@ class SerdesSlaveInit(Module, AutoCSR):
         self.comb += self.reset.eq(serdes.rx_idle)
 
         self.submodules.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
+
+        phase_detector_too_early_last = Signal()
+
         fsm.act("IDLE",
+            NextValue(delay_found, 0),
             NextValue(delay, 0),
-            NextValue(delay_min, 0),
-            NextValue(delay_min_found, 0),
-            NextValue(delay_max, 0),
-            NextValue(delay_max_found, 0),
             serdes.rx_delay_rst.eq(1),
+            NextValue(bitslip_found, 0),
             NextValue(bitslip, 0),
+            NextValue(phase_detector_too_early_last, 0),
             NextState("WAIT_STABLE"),
             serdes.tx_idle.eq(1)
         )
@@ -255,75 +244,63 @@ class SerdesSlaveInit(Module, AutoCSR):
             timer.wait.eq(1),
             If(timer.done,
                 timer.wait.eq(0),
+                serdes.phase_detector.reset.eq(1),
+                If(~delay_found,
+                    NextState("CHECK_PHASE")
+                ).Else(
+                    NextState("CHECK_PATTERN")
+                ),
+            ),
+            serdes.tx_idle.eq(1)
+        )
+        fsm.act("CHECK_PHASE",
+            # Since we are always incrementing delay,
+            # ideal sampling  is found when phase detector
+            # transitions from too_early to too_late
+            If(serdes.phase_detector.too_late & 
+                phase_detector_too_early_last,
+                NextValue(delay_found, 1),
                 NextState("CHECK_PATTERN")
+            ).Elif(serdes.phase_detector.too_late |
+                   serdes.phase_detector.too_early,
+                NextValue(phase_detector_too_early_last, 
+                          serdes.phase_detector.too_early),
+                NextState("INC_DELAY")
             ),
             serdes.tx_idle.eq(1)
         )
-        fsm.act("CHECK_PATTERN",
-            If(~delay_min_found,
-                If(serdes.rx_comma,
-                    timer.wait.eq(1),
-                    If(timer.done,
-                        timer.wait.eq(0),
-                        NextValue(delay_min, delay),
-                        NextValue(delay_min_found, 1)
-                    )
-                ).Else(
-                    NextState("INC_DELAY_BITSLIP")
-                ),
-            ).Else(
-                If(~serdes.rx_comma,
-                    NextValue(delay_max, delay),
-                    NextValue(delay_max_found, 1),
-                    NextState("RESET_SAMPLING_WINDOW")
-                ).Else(
-                    NextState("INC_DELAY_BITSLIP")
-                )
-            ),
-            serdes.tx_idle.eq(1)
-        )
-        self.comb += serdes.rx_bitslip_value.eq(bitslip)
-        fsm.act("INC_DELAY_BITSLIP",
-            NextState("WAIT_STABLE"),
+        fsm.act("INC_DELAY",
             If(delay == (taps - 1),
-                If(delay_min_found,
-                    NextState("ERROR")
-                ),
-                If(bitslip == (40 - 1),
-                    NextValue(bitslip, 0)
-                ).Else(    
-                    NextValue(bitslip, bitslip + 1)
-                ),
-                NextValue(delay, 0),
-                serdes.rx_delay_rst.eq(1)
-            ).Else(
-                NextValue(delay, delay + 1),
-                serdes.rx_delay_inc.eq(1),
-                serdes.rx_delay_ce.eq(1)
-            ),
-            serdes.tx_idle.eq(1)
-        )
-        fsm.act("RESET_SAMPLING_WINDOW",
-            NextValue(delay, 0),
-            serdes.rx_delay_rst.eq(1),
-            NextState("WAIT_SAMPLING_WINDOW")
-        )
-        fsm.act("CONFIGURE_SAMPLING_WINDOW",
-            If(delay == (delay_min + (delay_max - delay_min)[1:]),
-                NextState("SEND_PATTERN")
+                NextState("ERROR")
             ).Else(
                 NextValue(delay, delay + 1),
                 serdes.rx_delay_inc.eq(1),
                 serdes.rx_delay_ce.eq(1),
-                NextState("WAIT_SAMPLING_WINDOW")
-            )
+                NextState("WAIT_STABLE")
+            ),
+            serdes.tx_idle.eq(1)
         )
-        fsm.act("WAIT_SAMPLING_WINDOW",
-            timer.wait.eq(1),
-            If(timer.done,
-                timer.wait.eq(0),
-                NextState("CONFIGURE_SAMPLING_WINDOW")
-            )
+        fsm.act("CHECK_PATTERN",
+            If(serdes.rx_comma,
+                timer.wait.eq(1),
+                If(timer.done,
+                    NextValue(bitslip_found, 1),
+                    NextState("SEND_PATTERN")
+                )
+            ).Else(
+                NextState("INC_BITSLIP")
+            ),
+            serdes.tx_idle.eq(1)
+        )
+        self.comb += serdes.rx_bitslip_value.eq(bitslip)
+        fsm.act("INC_BITSLIP",
+            If(bitslip == (40 - 1),
+                NextState("ERROR")
+            ).Else(
+                NextValue(bitslip, bitslip + 1),
+                NextState("WAIT_STABLE")
+            ),
+            serdes.tx_idle.eq(1)
         )
         fsm.act("SEND_PATTERN",
             timer.wait.eq(1),
@@ -350,11 +327,9 @@ class SerdesControl(Module, AutoCSR):
         self.error = CSRStatus()
 
         self.delay = CSRStatus(9)
-        self.delay_min_found = CSRStatus()
-        self.delay_min = CSRStatus(9)
-        self.delay_max_found = CSRStatus()
-        self.delay_max = CSRStatus(9)
+        self.delay_found = CSRStatus()
         self.bitslip = CSRStatus(6)
+        self.bitslip_found = CSRStatus()
 
         # # #
 
@@ -363,10 +338,8 @@ class SerdesControl(Module, AutoCSR):
         self.comb += [
             self.ready.status.eq(init.ready),
             self.error.status.eq(init.error),
+            self.delay_found.status.eq(init.delay_found),
             self.delay.status.eq(init.delay),
-            self.delay_min_found.status.eq(init.delay_min_found),
-            self.delay_min.status.eq(init.delay_min),
-            self.delay_max_found.status.eq(init.delay_max_found),
-            self.delay_max.status.eq(init.delay_max),
+            self.bitslip_found.status.eq(init.bitslip_found),
             self.bitslip.status.eq(init.bitslip)
         ]
