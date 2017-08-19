@@ -82,21 +82,42 @@ static void reboot(void)
 	asm("call r0");
 }
 
+static void busy_wait(unsigned int ds)
+{
+	timer0_en_write(0);
+	timer0_reload_write(0);
+	timer0_load_write(CONFIG_CLOCK_FREQUENCY/10*ds);
+	timer0_en_write(1);
+	timer0_update_value_write(1);
+	while(timer0_value_read()) {
+		timer0_update_value_write(1);
+	}
+}
+
 static void amc_rtm_link_init(void)
 {
+	int timeout = 10;
+
 	amc_rtm_link_control_reset_write(1);
-	while ((amc_rtm_link_control_ready_read() & 0x1) == 0 |
-		   (amc_rtm_link_control_error_read() & 0x1) == 0);
+	while (((amc_rtm_link_control_ready_read() & 0x1) == 0) &
+		   ((amc_rtm_link_control_error_read() & 0x1) == 0) &
+		   (timeout > 0)) {
+		busy_wait(1);
+	    timeout--;
+	}
+
 	printf("delay_found: %d\n"
 		   "delay: %d\n"
 		   "bitslip_found: %d\n"
 		   "bitslip: %d\n"
-		   "ready: %d\n",
+		   "ready: %d\n"
+		   "error: %d\n",
 		    amc_rtm_link_control_delay_found_read(),
 		    amc_rtm_link_control_delay_read(),
 		    amc_rtm_link_control_bitslip_found_read(),
 		    amc_rtm_link_control_bitslip_read(),
-		    amc_rtm_link_control_ready_read());
+		    amc_rtm_link_control_ready_read(),
+		    amc_rtm_link_control_error_read());
 }
 
 #define AMC_RTM_LINK_RAM_BASE 0x20000000
