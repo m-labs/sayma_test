@@ -155,13 +155,13 @@ class SerdesMasterInit(Module):
             # Since we are always incrementing delay,
             # ideal sampling  is found when phase detector
             # transitions from too_early to too_late
-            If(serdes.phase_detector.too_late & 
+            If(serdes.phase_detector.too_late &
                 phase_detector_too_early_last,
                 NextValue(delay_found, 1),
                 NextState("CHECK_PATTERN")
             ).Elif(serdes.phase_detector.too_late |
                    serdes.phase_detector.too_early,
-                NextValue(phase_detector_too_early_last, 
+                NextValue(phase_detector_too_early_last,
                           serdes.phase_detector.too_early),
                 NextState("INC_DELAY")
             ),
@@ -257,13 +257,13 @@ class SerdesSlaveInit(Module, AutoCSR):
             # Since we are always incrementing delay,
             # ideal sampling  is found when phase detector
             # transitions from too_early to too_late
-            If(serdes.phase_detector.too_late & 
+            If(serdes.phase_detector.too_late &
                 phase_detector_too_early_last,
                 NextValue(delay_found, 1),
                 NextState("CHECK_PATTERN")
             ).Elif(serdes.phase_detector.too_late |
                    serdes.phase_detector.too_early,
-                NextValue(phase_detector_too_early_last, 
+                NextValue(phase_detector_too_early_last,
                           serdes.phase_detector.too_early),
                 NextState("INC_DELAY")
             ),

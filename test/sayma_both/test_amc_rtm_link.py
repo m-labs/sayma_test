@@ -51,9 +51,9 @@ groups = {
 def analyzer():
     analyzer = LiteScopeAnalyzerDriver(wb_amc.regs, "analyzer", debug=True)
     analyzer.configure_group(groups["wishbone"])
-    analyzer.configure_trigger(cond={"wishbone_access" : 1})  
+    analyzer.configure_trigger(cond={"wishbone_access" : 1})
     analyzer.run(offset=32, length=128)
-    
+
     write_pattern(32)
     errors = check_pattern(32, debug=True)
     print("errors: {:d}".format(errors))
@@ -93,7 +93,7 @@ if sys.argv[1] == "init":
     print("bitslip: {:d}".format(wb_rtm.regs.amc_rtm_link_control_bitslip.read()))
     print("bitslip_found: {:d}".format(wb_rtm.regs.amc_rtm_link_control_bitslip_found.read()))
     print("ready: {:d}".format(wb_rtm.regs.amc_rtm_link_control_ready.read()))
-    print("error: {:d}".format(wb_rtm.regs.amc_rtm_link_control_error.read())) 
+    print("error: {:d}".format(wb_rtm.regs.amc_rtm_link_control_error.read()))
 elif sys.argv[1] == "wishbone":
     write_pattern(1024)
     errors = check_pattern(1024, debug=True)

@@ -150,7 +150,7 @@ def bruteforce_delay_finder():
     nwords = 64
     use_bist = True
     debug = False
-    
+
     dqs_delay = 40
     for module in range(nmodules):
         wb.regs.ddrphy_dly_sel.write(1<<module)
@@ -159,11 +159,11 @@ def bruteforce_delay_finder():
         for module in range(nmodules):
             wb.regs.ddrphy_dly_sel.write(1<<module)
             wb.regs.ddrphy_wdly_dqs_inc.write(1)
-    
+
     for bitslip in bitslip_range:
         print("bitslip {:d}: |".format(bitslip), end="")
         for module in range(nmodules):
-            wb.regs.ddrphy_dly_sel.write(1<<module)          
+            wb.regs.ddrphy_dly_sel.write(1<<module)
             wb.regs.ddrphy_rdly_dq_rst.write(1)
             for i in range(bitslip):
                 wb.regs.ddrphy_rdly_dq_bitslip.write(1)
@@ -222,27 +222,27 @@ def bist(test_base, test_length, test_increment):
     write_speed = write_test(test_base + 128, test_length)
     read_speed, read_errors = read_test(test_base, test_length)
     print("ok") if read_errors else print("ko")
-    
+
     print("write length error check...", end="")
     write_speed = write_test(test_base, test_length - 128)
     read_speed, read_errors = read_test(test_base, test_length)
     print("ok") if read_errors else print("ko")
-    
+
     print("read base error check...", end="")
     write_speed = write_test(test_base, test_length)
     read_speed, read_errors = read_test(test_base + 128, test_length)
     print("ok") if read_errors else print("ko")
-    
+
     print("read length error check...", end="")
     write_speed = write_test(test_base, test_length)
     read_speed, read_errors = read_test(test_base, test_length + 128)
     print("ok") if read_errors else print("ko")
-    
+
     #
-    
+
     tested_errors = 0
     tested_length = 0
-    
+
     i = 0
     while True:
         if i%10 == 0:
@@ -269,16 +269,16 @@ def analyzer():
         "dfi_phase2": 2,
         "dfi_phase3": 3
     }
-    
+
     analyzer = LiteScopeAnalyzerDriver(wb.regs, "analyzer", debug=True)
     analyzer.configure_group(groups["dfi_phase0"])
     analyzer.configure_trigger(cond={})
-    
+
     write_test(0x00000000, 1024*MB, False)
     read_test(0x00000000, 1024*MB, False)
-    
+
     analyzer.run(offset=32, length=64)
-    
+
     analyzer.wait_done()
     analyzer.upload()
     analyzer.save("dump.vcd")

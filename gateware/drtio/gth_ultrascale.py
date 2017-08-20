@@ -214,7 +214,7 @@ class GTH(Module, AutoCSR):
         self.ready = CSRStatus(2)
 
         # # #
-        
+
         nwords = dw//10
 
         use_cpll = isinstance(pll, GTHChannelPLL)

@@ -168,7 +168,7 @@ class JESDTestSoC(SoCCore):
                                                   clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
-        # clock mux : 125MHz ext SMA clock to HMC830 input 
+        # clock mux : 125MHz ext SMA clock to HMC830 input
         self.comb += [
             platform.request("clk_src_ext_sel").eq(1), # use ext clk from sma
             platform.request("ref_clk_src_sel").eq(1),
@@ -314,7 +314,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             # core <--> etherbone
             amc_rtm_link_depacketizer.source.connect(amc_rtm_link_etherbone.sink),
             amc_rtm_link_etherbone.source.connect(amc_rtm_link_packetizer.sink),
-            
+
             # core --> serdes
             amc_rtm_link_packetizer.source.connect(amc_rtm_link_tx_cdc.sink),
             If(amc_rtm_link_tx_cdc.source.valid & amc_rtm_link_init.ready,
@@ -358,7 +358,7 @@ class AMCRTMLinkTestSoC(SoCCore):
                 amc_rtm_link_serdes.encoder.d[2],
                 amc_rtm_link_serdes.encoder.k[3],
                 amc_rtm_link_serdes.encoder.d[3],
-    
+
                 amc_rtm_link_serdes.decoders[0].d,
                 amc_rtm_link_serdes.decoders[0].k,
                 amc_rtm_link_serdes.decoders[1].d,

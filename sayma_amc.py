@@ -462,7 +462,7 @@ class JESDTestSoC(SoCCore):
                     qpll = JESD204BGTHQuadPLL(self.refclk, refclk_freq, linerate)
                     self.submodules += qpll
                     print(qpll)
-    
+
                 phy = LiteJESD204BPhyTX(
                     qpll, get_phy_pads(jesd_pads, i), self.clk_freq,
                     transceiver="gth")
@@ -477,9 +477,9 @@ class JESDTestSoC(SoCCore):
             core = to_jesd(LiteJESD204BCoreTX(phys, settings, converter_data_width=64))
             control = to_jesd(LiteJESD204BCoreTXControl(core))
             setattr(self.submodules, "dac"+str(dac)+"_core", core)
-            setattr(self.submodules, "dac"+str(dac)+"_control", control)           
+            setattr(self.submodules, "dac"+str(dac)+"_control", control)
             core.register_jsync(platform.request("dac_sync", dac))
-    
+
             # jesd pattern (ramp)
             data0 = Signal(16)
             data1 = Signal(16)
@@ -497,7 +497,7 @@ class JESDTestSoC(SoCCore):
                 core.sink.converter2.eq(Cat(data2, data2)),
                 core.sink.converter3.eq(Cat(data3, data3))
             ]
-            
+
         jesd_dac0_phy0_counter = Signal(32)
         self.sync.dac0_core_phy0_tx += jesd_dac0_phy0_counter.eq(jesd_dac0_phy0_counter + 1)
         self.comb += platform.request("user_led", 0).eq(jesd_dac0_phy0_counter[26])
@@ -568,7 +568,7 @@ class DRTIOTestSoC(SoCCore):
             print(qpll)
 
         self.submodules.drtio_phy = drtio_phy = MultiGTH(
-            plls, 
+            plls,
             platform.request("drtio_tx"),
             platform.request("drtio_rx"),
             clk_freq,
@@ -680,7 +680,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             # core <--> etherbone
             amc_rtm_link_depacketizer.source.connect(amc_rtm_link_etherbone.sink),
             amc_rtm_link_etherbone.source.connect(amc_rtm_link_packetizer.sink),
-            
+
             # core --> serdes
             amc_rtm_link_packetizer.source.connect(amc_rtm_link_tx_cdc.sink),
             If(amc_rtm_link_tx_cdc.source.valid & amc_rtm_link_init.ready,
