@@ -381,3 +381,16 @@ hmc7043_config_5gbps = [
     (0x151, 0x0),
     (0x152, 0x13),
 ]
+
+
+class DummyDUT(list):
+    def write(self, addr, value):
+        self.append((addr, value))
+
+# hmc7043 config:
+# f in on DAC_CLK (mezzanine)
+# dac clock: f
+# fpga clock: f/4
+# sysref clock: f/64
+hmc7043_config_phaser = DummyDUT()
+exec(open("../../doc/hmc7043_config_600M_dir.py").read(), {"dut": hmc7043_config_phaser})
