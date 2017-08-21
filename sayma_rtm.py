@@ -172,7 +172,7 @@ class JESDTestSoC(SoCCore):
         self.comb += [
             platform.request("clk_src_ext_sel").eq(1), # use ext clk from sma
             platform.request("ref_clk_src_sel").eq(1),
-            platform.request("dac_clk_src_sel").eq(1), # use clk from hmc830
+            platform.request("dac_clk_src_sel").eq(0), # use clk from dac_clk
         ]
 
         # hmc spi

@@ -437,8 +437,8 @@ class JESDTestSoC(SoCCore):
         ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
         ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
         settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
-        linerate = 10e9
-        refclk_freq = 250e6
+        linerate = 6e9
+        refclk_freq = 150e6
 
         self.clock_domains.cd_jesd = ClockDomain()
         refclk_pads = platform.request("dac_refclk", dac)
