@@ -62,8 +62,8 @@ dut.write(0x5C, 0x0)
 dut.write(0x5D, 0x6)
 
 # dist_cfg1_extvco_islowfreq_sel[0:0] = 0x0
-# dist_cfg1_extvco_div2_sel[1:1] = 0x1
-dut.write(0x64, 0x2)
+# dist_cfg1_extvco_div2_sel[1:1] = 0x0
+dut.write(0x64, 0x0)
 
 # clkgrpx_cfg1_alg_dly_lowpwr_sel[0:0] = 0x0
 dut.write(0x65, 0x0)

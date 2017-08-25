@@ -26,13 +26,28 @@ class ClkGenSoC(SoCCore):
                                                   clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
 
+        pll_locked = Signal()
+        pll_fb = Signal()
+        pll_clk1000 = Signal()
+        self.specials += [
+            Instance("PLLE2_BASE",
+                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
 
-        user_sma_clock = Signal()
+                     # VCO @ 1GHz
+                     p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=5.0,
+                     p_CLKFBOUT_MULT=5, p_DIVCLK_DIVIDE=1,
+                     i_CLKIN1=ClockSignal(), i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
+
+                     # 1GHz
+                     p_CLKOUT2_DIVIDE=1, p_CLKOUT2_PHASE=0.0,
+                     o_CLKOUT2=pll_clk1000
+            )
+        ]
+
         user_sma_clock_pads = platform.request("user_sma_clock")
-        self.sync += user_sma_clock.eq(~user_sma_clock)
         self.specials += [
             Instance("OBUFDS",
-                i_I=user_sma_clock,
+                i_I=pll_clk1000,
                 o_O=user_sma_clock_pads.p,
                 o_OB=user_sma_clock_pads.n
             )
