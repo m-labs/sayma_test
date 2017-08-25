@@ -23,7 +23,7 @@ for addr, data in hmc830_config:
     hmc830.write(addr, data)
 
 # configure hmc7043
-for addr, data in hmc7043_config_10gbps:
+for addr, data in hmc7043_config_5gbps:
     hmc7043.write(addr, data)
 
 # # #

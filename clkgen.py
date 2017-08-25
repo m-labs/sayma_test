@@ -28,7 +28,7 @@ class ClkGenSoC(SoCCore):
 
         pll_locked = Signal()
         pll_fb = Signal()
-        pll_clk1000 = Signal()
+        pll_out = Signal()
         self.specials += [
             Instance("PLLE2_BASE",
                      p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
@@ -40,14 +40,14 @@ class ClkGenSoC(SoCCore):
 
                      # 1GHz
                      p_CLKOUT2_DIVIDE=1, p_CLKOUT2_PHASE=0.0,
-                     o_CLKOUT2=pll_clk1000
+                     o_CLKOUT2=pll_out
             )
         ]
 
         user_sma_clock_pads = platform.request("user_sma_clock")
         self.specials += [
             Instance("OBUFDS",
-                i_I=pll_clk1000,
+                i_I=pll_out,
                 o_O=user_sma_clock_pads.p,
                 o_OB=user_sma_clock_pads.n
             )

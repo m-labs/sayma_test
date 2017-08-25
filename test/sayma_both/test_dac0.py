@@ -31,7 +31,7 @@ dac0 = AD9154(wb_rtm.regs, 0)
 dac0.reset()
 print("dac0 configuration")
 print("dac0 present: {:s}".format(str(dac0.check_presence())))
-dac0.startup(jesd_settings, linerate=10e9)
+dac0.startup(jesd_settings, linerate=5e9)
 # show dac0 status
 dac0.print_status()
 

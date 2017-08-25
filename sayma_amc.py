@@ -288,6 +288,17 @@ class _CRG(Module):
             i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
 
+def _build_version(with_time=True):
+    import datetime
+    import time
+    if with_time:
+        return datetime.datetime.fromtimestamp(
+                time.time()).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        return datetime.datetime.fromtimestamp(
+                time.time()).strftime("%Y-%m-%d")
+
+
 class SDRAMTestSoC(SoCSDRAM):
     csr_map = {
         "ddrphy":    20,
@@ -311,7 +322,7 @@ class SDRAMTestSoC(SoCSDRAM):
             csr_data_width=8 if with_cpu else 32,
             l2_size=128,
             with_uart=with_cpu, uart_stub=False,
-            ident="Sayma AMC SDRAM Test Design",
+            ident="Sayma AMC SDRAM Test Design " + _build_version(),
             with_timer=with_cpu
         )
         self.submodules.crg = _CRG(platform)
@@ -413,7 +424,7 @@ class JESDTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC JESD Test Design",
+            ident="Sayma AMC JESD Test Design " + _build_version(),
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
@@ -437,8 +448,8 @@ class JESDTestSoC(SoCCore):
         ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
         ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
         settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
-        linerate = 10e9
-        refclk_freq = 250e6
+        linerate = 5e9
+        refclk_freq = 125e6
 
         self.clock_domains.cd_jesd = ClockDomain()
         refclk_pads = platform.request("dac_refclk", dac)
@@ -508,11 +519,6 @@ class JESDTestSoC(SoCCore):
         self.comb += platform.request("user_led", 2).eq(jesd_dac1_phy0_counter[26])
         self.comb += platform.request("user_led", 3).eq(self.dac1_core.jsync)
 
-        # output divided phy0_tx clock on user io (should be 125MHz)
-        phy0_tx_div2 = Signal()
-        self.sync.dac0_core_phy0_tx += phy0_tx_div2.eq(~phy0_tx_div2)
-        self.comb += platform.request("user_io", 0).eq(phy0_tx_div2)
-
     def do_exit(self, vns):
         pass
 
@@ -529,7 +535,7 @@ class DRTIOTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC DRTIO Test Design",
+            ident="Sayma AMC DRTIO Test Design " + _build_version(),
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
@@ -620,7 +626,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma AMC / AMC <--> RTM Link Test Design",
+            ident="Sayma AMC / AMC <--> RTM Link Test Design " + _build_version(),
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)

@@ -141,6 +141,17 @@ class _CRG(Module):
         self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
 
+def _build_version(with_time=True):
+    import datetime
+    import time
+    if with_time:
+        return datetime.datetime.fromtimestamp(
+                time.time()).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        return datetime.datetime.fromtimestamp(
+                time.time()).strftime("%Y-%m-%d")
+
+
 class JESDTestSoC(SoCCore):
     csr_map = {
         "hmc_spi":      20,
@@ -158,7 +169,7 @@ class JESDTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma RTM JESD Test Design",
+            ident="Sayma RTM JESD Test Design " + _build_version(),
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
@@ -262,7 +273,7 @@ class AMCRTMLinkTestSoC(SoCCore):
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="Sayma RTM / AMC <--> RTM Link Test Design",
+            ident="Sayma RTM / AMC <--> RTM Link Test Design " + _build_version(),
             with_timer=False
         )
         self.submodules.crg = _CRG(platform)
