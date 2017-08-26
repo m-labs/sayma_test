@@ -5,7 +5,7 @@ from litex.gen.genlib.misc import BitSlip
 
 from litex.soc.cores.code_8b10b import Encoder, Decoder
 
-from amc_rtm_link.phy import PhaseDetector
+from serwb.phy import PhaseDetector
 
 
 class S7SerdesPLL(Module):

@@ -15,7 +15,7 @@ from litex.gen import *
 from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
-from amc_rtm_link.packet import *
+from serwb.packet import *
 
 
 class Packetizer(Module):

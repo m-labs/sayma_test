@@ -10,7 +10,7 @@ from litex.build.xilinx import XilinxPlatform
 
 from litex.gen.genlib.io import CRG
 
-from gateware.transceiver.amc_rtm_link import *
+from gateware.transceiver.serwb import *
 
 
 _io = [

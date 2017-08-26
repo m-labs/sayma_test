@@ -5,8 +5,8 @@ from litex.gen import *
 import sys
 sys.path.append("../../gateware/")
 
-from amc_rtm_link import packet
-from amc_rtm_link import etherbone
+from serwb import packet
+from serwb import etherbone
 
 from litex.soc.interconnect.wishbone import SRAM
 from litex.soc.interconnect.stream import Converter

@@ -69,31 +69,31 @@ if len(sys.argv) < 2:
     exit()
 
 if sys.argv[1] == "init":
-    wb_amc.regs.amc_rtm_link_control_reset.write(1)
+    wb_amc.regs.serwb_control_reset.write(1)
     timeout = 20
-    while not (wb_amc.regs.amc_rtm_link_control_ready.read() & 0x1 |
-               wb_amc.regs.amc_rtm_link_control_error.read() & 0x1 |
+    while not (wb_amc.regs.serwb_control_ready.read() & 0x1 |
+               wb_amc.regs.serwb_control_error.read() & 0x1 |
                timeout > 0):
         time.sleep(0.1)
         timeout -= 1
     time.sleep(2)
     print("AMC configuration")
     print("-----------------")
-    print("delay_found: {:d}".format(wb_amc.regs.amc_rtm_link_control_delay_found.read()))
-    print("delay: {:d}".format(wb_amc.regs.amc_rtm_link_control_delay.read()))
-    print("bitslip: {:d}".format(wb_amc.regs.amc_rtm_link_control_bitslip.read()))
-    print("bitslip_found: {:d}".format(wb_amc.regs.amc_rtm_link_control_bitslip_found.read()))
-    print("ready: {:d}".format(wb_amc.regs.amc_rtm_link_control_ready.read()))
-    print("error: {:d}".format(wb_amc.regs.amc_rtm_link_control_error.read()))
+    print("delay_found: {:d}".format(wb_amc.regs.serwb_control_delay_found.read()))
+    print("delay: {:d}".format(wb_amc.regs.serwb_control_delay.read()))
+    print("bitslip: {:d}".format(wb_amc.regs.serwb_control_bitslip.read()))
+    print("bitslip_found: {:d}".format(wb_amc.regs.serwb_control_bitslip_found.read()))
+    print("ready: {:d}".format(wb_amc.regs.serwb_control_ready.read()))
+    print("error: {:d}".format(wb_amc.regs.serwb_control_error.read()))
     print("")
     print("RTM configuration")
     print("-----------------")
-    print("delay_found: {:d}".format(wb_rtm.regs.amc_rtm_link_control_delay_found.read()))
-    print("delay: {:d}".format(wb_rtm.regs.amc_rtm_link_control_delay.read()))
-    print("bitslip: {:d}".format(wb_rtm.regs.amc_rtm_link_control_bitslip.read()))
-    print("bitslip_found: {:d}".format(wb_rtm.regs.amc_rtm_link_control_bitslip_found.read()))
-    print("ready: {:d}".format(wb_rtm.regs.amc_rtm_link_control_ready.read()))
-    print("error: {:d}".format(wb_rtm.regs.amc_rtm_link_control_error.read()))
+    print("delay_found: {:d}".format(wb_rtm.regs.serwb_control_delay_found.read()))
+    print("delay: {:d}".format(wb_rtm.regs.serwb_control_delay.read()))
+    print("bitslip: {:d}".format(wb_rtm.regs.serwb_control_bitslip.read()))
+    print("bitslip_found: {:d}".format(wb_rtm.regs.serwb_control_bitslip_found.read()))
+    print("ready: {:d}".format(wb_rtm.regs.serwb_control_ready.read()))
+    print("error: {:d}".format(wb_rtm.regs.serwb_control_error.read()))
 elif sys.argv[1] == "wishbone":
     write_pattern(1024)
     errors = check_pattern(1024, debug=True)
