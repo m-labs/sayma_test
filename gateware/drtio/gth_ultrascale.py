@@ -478,19 +478,20 @@ class MultiGTH(Module, AutoCSR):
     def __init__(self, plls, tx_pads, rx_pads, sys_clk_freq, dw=20, **kwargs):
         self.nlanes = nlanes = len(tx_pads.p)
 
+        self.gths = []
+        self.encoders = []
+        self.decoders = []
+        self.rx_ready = Signal()
+
+        # # #
+
+        nwords = dw//10
+
         class EncoderExposer:
             def __init__(self):
                 self.k = Signal()
                 self.d = Signal(8)
 
-        nwords = dw//10
-
-        self.gths = [None for i in range(nlanes)]
-        self.encoders = [EncoderExposer() for i in range(nwords*nlanes)]
-        self.decoders = [None for i in range(nwords*nlanes)]
-        self.rx_ready = Signal()
-
-        # # #
 
         def get_pads(pads, i):
             class GTHPads:
@@ -502,14 +503,16 @@ class MultiGTH(Module, AutoCSR):
         rx_ready = Signal(reset=1)
         for i in range(nlanes):
             gth = GTH(plls[i], get_pads(tx_pads, i), get_pads(rx_pads, i), sys_clk_freq, dw=dw, **kwargs)
-            self.gths[i] = gth
+            self.gths.append(gth)
             setattr(self.submodules, "gth"+str(i), gth)
             for j in range(nwords):
+                encoder = EncoderExposer()
+                self.encoders.append(encoder)
                 self.comb += [
-                    gth.encoder.k[j].eq(self.encoders[nwords*i + j].k),
-                    gth.encoder.d[j].eq(self.encoders[nwords*i + j].d)
+                    gth.encoder.k[j].eq(encoder.k),
+                    gth.encoder.d[j].eq(encoder.d)
                 ]
-                self.decoders[nwords*i + j] = gth.decoders[j]
+                self.decoders.append(gth.decoders[j])
             new_rx_ready = Signal()
             self.comb += new_rx_ready.eq(rx_ready & gth.rx_ready)
             rx_ready = new_rx_ready
