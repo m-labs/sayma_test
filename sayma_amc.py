@@ -620,7 +620,7 @@ class SERWBTestSoC(SoCCore):
     }
     mem_map.update(SoCCore.mem_map)
 
-    def __init__(self, platform, with_analyzer=False):
+    def __init__(self, platform, with_analyzer=True):
         clk_freq = int(125e6)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
@@ -710,11 +710,10 @@ class SERWBTestSoC(SoCCore):
                 wishbone_access,
                 serwb_init.ready,
                 serwb_init.delay,
+                serwb_init.bitslip_found,
                 serwb_init.bitslip,
-                serwb_init.delay_min,
-                serwb_init.delay_min_found,
-                serwb_init.delay_max,
-                serwb_init.delay_max_found
+                serwb_init.delay,
+                serwb_init.delay_found
             ]
             serdes_group = [
                 wishbone_access,

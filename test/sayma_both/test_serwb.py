@@ -49,7 +49,7 @@ groups = {
 }
 
 def analyzer():
-    analyzer = LiteScopeAnalyzerDriver(wb_amc.regs, "analyzer", debug=True)
+    analyzer = LiteScopeAnalyzerDriver(wb_amc.regs, "analyzer", config_csv="../sayma_amc/analyzer.csv", debug=True)
     analyzer.configure_group(groups["wishbone"])
     analyzer.configure_trigger(cond={"wishbone_access" : 1})
     analyzer.run(offset=32, length=128)
