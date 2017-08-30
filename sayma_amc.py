@@ -26,7 +26,7 @@ from litejesd204b.phy import LiteJESD204BPhyTX
 from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
 
-from drtio.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, MultiGTH
+from drtio.gth_ultrascale import GTHChannelPLL, GTHQuadPLL, GTH
 
 from serwb.phy import SERWBPLL, SERWBPHY
 from serwb.core import SERWBCore
@@ -185,16 +185,27 @@ _io = [
         Subsignal("txn", Pins("B5 C3 D5 F5 G3 J3 L3 N3"))
     ),
 
+
     # drtio
     ("drtio_tx", 0,
-        Subsignal("p", Pins("AN4 AM6")),
-        Subsignal("n", Pins("AN3 AM5"))
+        Subsignal("p", Pins("AN4")),
+        Subsignal("n", Pins("AN3"))
     ),
     ("drtio_rx", 0,
-        Subsignal("p", Pins("AP2 AM2")),
-        Subsignal("n", Pins("AP1 AM1"))
+        Subsignal("p", Pins("AP2")),
+        Subsignal("n", Pins("AP1"))
     ),
-    ("drtio_tx_disable_n", 0, Pins("AP11 AM12"), IOStandard("LVCMOS18")),
+    ("drtio_tx_disable_n", 0, Pins("AP11"), IOStandard("LVCMOS18")),
+
+    ("drtio_tx", 1,
+        Subsignal("p", Pins("AM6")),
+        Subsignal("n", Pins("AM5"))
+    ),
+    ("drtio_rx", 1,
+        Subsignal("p", Pins("AM2")),
+        Subsignal("n", Pins("AM1"))
+    ),
+    ("drtio_tx_disable_n", 1, Pins("AM12"), IOStandard("LVCMOS18")),
 
     # rtm
     ("rtm_refclk125", 0,
@@ -571,36 +582,37 @@ class DRTIOTestSoC(SoCCore):
             self.submodules += qpll
             print(qpll)
 
-        self.submodules.drtio_phy = drtio_phy = MultiGTH(
+        self.submodules.drtio_phy = drtio_phy = GTH(
             plls,
-            platform.request("drtio_tx"),
-            platform.request("drtio_rx"),
+            [platform.request("drtio_tx", i) for i in range(2)],
+            [platform.request("drtio_rx", i) for i in range(2)],
             clk_freq,
-            dw=dw)
-        self.comb += platform.request("drtio_tx_disable_n").eq(0b11)
+            20)
+        self.comb += platform.request("drtio_tx_disable_n", 0).eq(0b1)
+        self.comb += platform.request("drtio_tx_disable_n", 1).eq(0b1)
 
         counter = Signal(32)
-        self.sync.gth0_tx += counter.eq(counter + 1)
+        self.sync.rtio += counter.eq(counter + 1)
 
-        for i in range(drtio_phy.nlanes):
+        for i, channel in enumerate(drtio_phy.channels):
             self.comb += [
-                drtio_phy.encoders[2*i + 0].k.eq(1),
-                drtio_phy.encoders[2*i + 0].d.eq((5 << 5) | 28),
-                drtio_phy.encoders[2*i + 1].k.eq(0),
+                channel.encoder.k[0].eq(1),
+                channel.encoder.d[0].eq((5 << 5) | 28),
+                channel.encoder.k[1].eq(0)
             ]
-            self.comb += drtio_phy.encoders[2*i + 1].d.eq(counter[26:])
+            self.comb += channel.encoder.d[1].eq(counter[26:])
             for j in range(2):
-                self.comb += platform.request("user_led", 2*i + j).eq(drtio_phy.decoders[2*i + 1].d[j])
+                self.comb += platform.request("user_led", 2*i + j).eq(channel.decoders[1].d[j])
 
-        for i in range(drtio_phy.nlanes):
-            drtio_phy.gths[i].cd_tx.clk.attr.add("keep")
-            drtio_phy.gths[i].cd_rx.clk.attr.add("keep")
-            platform.add_period_constraint(drtio_phy.gths[i].cd_tx.clk, 1e9/drtio_phy.gths[i].tx_clk_freq)
-            platform.add_period_constraint(drtio_phy.gths[i].cd_rx.clk, 1e9/drtio_phy.gths[i].rx_clk_freq)
+        for gth in drtio_phy.gths:
+            gth.cd_rtio_tx.clk.attr.add("keep")
+            gth.cd_rtio_rx.clk.attr.add("keep")
+            platform.add_period_constraint(gth.cd_rtio_tx.clk, 1e9/gth.rtio_clk_freq)
+            platform.add_period_constraint(gth.cd_rtio_rx.clk, 1e9/gth.rtio_clk_freq)
             self.platform.add_false_path_constraints(
                 self.crg.cd_sys.clk,
-                drtio_phy.gths[i].cd_tx.clk,
-                drtio_phy.gths[i].cd_rx.clk)
+                gth.cd_rtio_tx.clk,
+                gth.cd_rtio_rx.clk)
 
     def do_exit(self, vns):
         pass

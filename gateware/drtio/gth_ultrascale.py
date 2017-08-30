@@ -1,13 +1,13 @@
 from litex.gen import *
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from litex.gen.genlib.cdc import MultiReg
 
 from litex.soc.interconnect.csr import *
 from litex.soc.cores.code_8b10b import Encoder, Decoder
 
+from drtio.common import TransceiverInterface, ChannelInterface
 from drtio.gth_ultrascale_init import GTHInit
 from drtio.clock_aligner import BruteforceClockAligner
-
-from drtio.prbs import *
 
 
 class GTHChannelPLL(Module):
@@ -198,20 +198,10 @@ CLKIN +----> /M  +-->       Charge Pump         | +------------+->/2+--> CLKOUT
         return r
 
 
-class GTH(Module, AutoCSR):
-    def __init__(self, pll, tx_pads, rx_pads, sys_clk_freq,
-                 clock_aligner=True, internal_loopback=False,
-                 tx_polarity=0, rx_polarity=0,
-                 dw=20):
+class GTHSingle(Module):
+    def __init__(self, pll, tx_pads, rx_pads, sys_clk_freq, dw=20, mode="master"):
         assert (dw == 20) or (dw == 40)
-        self.tx_produce_square_wave = CSRStorage()
-        self.tx_prbs_config = CSRStorage(2)
-
-        self.rx_prbs_config = CSRStorage(2)
-        self.rx_prbs_errors = CSRStatus(32)
-
-        self.restart = CSR()
-        self.ready = CSRStatus(2)
+        assert mode in ["master", "slave"]
 
         # # #
 
@@ -221,58 +211,30 @@ class GTH(Module, AutoCSR):
         use_qpll0 = isinstance(pll, GTHQuadPLL) and pll.config["qpll"] == "qpll0"
         use_qpll1 = isinstance(pll, GTHQuadPLL) and pll.config["qpll"] == "qpll1"
 
-        self.submodules.encoder = ClockDomainsRenamer("tx")(
+        self.submodules.encoder = encoder = ClockDomainsRenamer("rtio_tx")(
             Encoder(nwords, True))
-        self.decoders = [ClockDomainsRenamer("rx")(
-            Decoder(True)) for _ in range(nwords)]
-        self.submodules += self.decoders
-
-        self.tx_ready = Signal()
+        self.submodules.decoders = decoders = [ClockDomainsRenamer("rtio_rx")(
+            (Decoder(True))) for _ in range(nwords)]
         self.rx_ready = Signal()
+
+        self.rtio_clk_freq = pll.config["linerate"]/dw
 
         # transceiver direct clock outputs
         # useful to specify clock constraints in a way palatable to Vivado
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.tx_clk_freq = pll.config["linerate"]/dw
-        self.rx_clk_freq = pll.config["linerate"]/dw
-
-        # control/status cdc
-        tx_produce_square_wave = Signal()
-        tx_prbs_config = Signal(2)
-
-        rx_prbs_config = Signal(2)
-        rx_prbs_errors = Signal(32)
-
-        self.specials += [
-            MultiReg(self.tx_produce_square_wave.storage, tx_produce_square_wave, "tx"),
-            MultiReg(self.tx_prbs_config.storage, tx_prbs_config, "tx"),
-        ]
-
-        self.specials += [
-            MultiReg(self.rx_prbs_config.storage, rx_prbs_config, "rx"),
-            MultiReg(rx_prbs_errors, self.rx_prbs_errors.status, "sys"), # FIXME
-        ]
-
         # # #
 
         # TX generates RTIO clock, init must be in system domain
         tx_init = GTHInit(sys_clk_freq, False)
-        self.comb += [
-            tx_init.restart.eq(self.restart.re),
-            self.tx_ready.eq(tx_init.done)
-        ]
         # RX receives restart commands from RTIO domain
-        rx_init = ClockDomainsRenamer("tx")(
-            GTHInit(self.tx_clk_freq, True))
+        rx_init = ClockDomainsRenamer("rtio_tx")(
+            GTHInit(self.rtio_clk_freq, True))
         self.submodules += tx_init, rx_init
         self.comb += [
             tx_init.plllock.eq(pll.lock),
-            rx_init.plllock.eq(pll.lock),
-            pll.reset.eq(tx_init.pllreset),
-            self.ready.status.eq(Cat(self.tx_ready,
-                                     self.rx_ready))
+            rx_init.plllock.eq(pll.lock)
         ]
 
         txdata = Signal(dw)
@@ -301,24 +263,24 @@ class GTH(Module, AutoCSR):
                 p_CPLL_CFG1=0xa4ac,
                 p_CPLL_CFG2=0xf007,
                 p_CPLL_CFG3=0x0000,
-                p_CPLL_FBDIV=1 if (use_qpll0 | use_qpll1) else pll.config["n2"],
-                p_CPLL_FBDIV_45=4 if (use_qpll0 | use_qpll1) else pll.config["n1"],
-                p_CPLL_REFCLK_DIV=1 if (use_qpll0 | use_qpll1) else pll.config["m"],
+                p_CPLL_FBDIV=1 if use_qpll0 or use_qpll1 else pll.config["n2"],
+                p_CPLL_FBDIV_45=4 if use_qpll0 or use_qpll1 else pll.config["n1"],
+                p_CPLL_REFCLK_DIV=1 if use_qpll0 or use_qpll1 else pll.config["m"],
                 p_RXOUT_DIV=pll.config["d"],
                 p_TXOUT_DIV=pll.config["d"],
                 i_CPLLRESET=0,
-                i_CPLLPD=0 if (use_qpll0 | use_qpll1) else pll.reset,
-                o_CPLLLOCK=Signal() if (use_qpll0 | use_qpll1) else pll.lock,
+                i_CPLLPD=0 if use_qpll0 or use_qpll1 else pll.reset,
+                o_CPLLLOCK=Signal() if use_qpll0 or use_qpll1 else pll.lock,
                 i_CPLLLOCKEN=1,
                 i_CPLLREFCLKSEL=0b001,
                 i_TSTIN=2**20-1,
-                i_GTREFCLK0=0 if (use_qpll0 | use_qpll1) else pll.refclk,
+                i_GTREFCLK0=0 if use_qpll0 or use_qpll1 else pll.refclk,
 
                 # QPLL
-                i_QPLL0CLK=0 if (use_cpll | use_qpll1) else pll.clk,
-                i_QPLL0REFCLK=0 if (use_cpll | use_qpll1) else pll.refclk,
-                i_QPLL1CLK=0 if (use_cpll | use_qpll0) else pll.clk,
-                i_QPLL1REFCLK=0 if (use_cpll | use_qpll0) else pll.refclk,
+                i_QPLL0CLK=0 if use_cpll or use_qpll1 else pll.clk,
+                i_QPLL0REFCLK=0 if use_cpll or use_qpll1 else pll.refclk,
+                i_QPLL1CLK=0 if use_cpll or use_qpll0 else pll.clk,
+                i_QPLL1REFCLK=0 if use_cpll or use_qpll0 else pll.refclk,
 
                 # TX clock
                 p_TXBUF_EN="FALSE",
@@ -343,17 +305,14 @@ class GTH(Module, AutoCSR):
                 i_TXCTRL0=Cat(*[txdata[10*i+8] for i in range(nwords)]),
                 i_TXCTRL1=Cat(*[txdata[10*i+9] for i in range(nwords)]),
                 i_TXDATA=Cat(*[txdata[10*i:10*i+8] for i in range(nwords)]),
-                i_TXUSRCLK=ClockSignal("tx"),
-                i_TXUSRCLK2=ClockSignal("tx"),
+                i_TXUSRCLK=ClockSignal("rtio_tx"),
+                i_TXUSRCLK2=ClockSignal("rtio_tx"),
 
                 # TX electrical
                 i_TXPD=0b00,
                 p_TX_CLKMUX_EN=1,
                 i_TXBUFDIFFCTRL=0b000,
                 i_TXDIFFCTRL=0b1100,
-
-                # Internal Loopback
-                i_LOOPBACK=0b010 if internal_loopback else 0b000,
 
                 # RX Startup/Reset
                 i_GTRXRESET=rx_init.gtXxreset,
@@ -382,8 +341,8 @@ class GTH(Module, AutoCSR):
                 i_RXOUTCLKSEL=0b010,
                 i_RXPLLCLKSEL=0b00,
                 o_RXOUTCLK=self.rxoutclk,
-                i_RXUSRCLK=ClockSignal("rx"),
-                i_RXUSRCLK2=ClockSignal("rx"),
+                i_RXUSRCLK=ClockSignal("rtio_rx"),
+                i_RXUSRCLK2=ClockSignal("rtio_rx"),
 
                 # RX Clock Correction Attributes
                 p_CLK_CORRECT_USE="FALSE",
@@ -404,10 +363,6 @@ class GTH(Module, AutoCSR):
                 p_RX_CLKMUX_EN=1,
                 i_RXELECIDLEMODE=0b11,
 
-                # Polarity
-                i_TXPOLARITY=tx_polarity,
-                i_RXPOLARITY=rx_polarity,
-
                 # Pads
                 i_GTHRXP=rx_pads.p,
                 i_GTHRXN=rx_pads.n,
@@ -419,102 +374,80 @@ class GTH(Module, AutoCSR):
         tx_reset_deglitched = Signal()
         tx_reset_deglitched.attr.add("no_retiming")
         self.sync += tx_reset_deglitched.eq(~tx_init.done)
-        self.clock_domains.cd_tx = ClockDomain()
-        tx_bufg_div = pll.config["clkin"]/self.tx_clk_freq
-        assert tx_bufg_div == int(tx_bufg_div)
-        self.specials += [
-            Instance("BUFG_GT", i_I=self.txoutclk, o_O=self.cd_tx.clk,
-                i_DIV=int(tx_bufg_div)-1),
-            AsyncResetSynchronizer(self.cd_tx, tx_reset_deglitched)
-        ]
+        self.clock_domains.cd_rtio_tx = ClockDomain()
+        if mode is "master":
+            tx_bufg_div = pll.config["clkin"]/self.rtio_clk_freq
+            assert tx_bufg_div == int(tx_bufg_div)
+            self.specials += \
+                Instance("BUFG_GT", i_I=self.txoutclk, o_O=self.cd_rtio_tx.clk,
+                    i_DIV=int(tx_bufg_div)-1)
+        self.specials += AsyncResetSynchronizer(self.cd_rtio_tx, tx_reset_deglitched)
 
         # rx clocking
         rx_reset_deglitched = Signal()
         rx_reset_deglitched.attr.add("no_retiming")
-        self.sync.tx += rx_reset_deglitched.eq(~rx_init.done)
-        self.clock_domains.cd_rx = ClockDomain()
+        self.sync.rtio_tx += rx_reset_deglitched.eq(~rx_init.done)
+        self.clock_domains.cd_rtio_rx = ClockDomain()
         self.specials += [
-            Instance("BUFG_GT", i_I=self.rxoutclk, o_O=self.cd_rx.clk),
-            AsyncResetSynchronizer(self.cd_rx, rx_reset_deglitched)
+            Instance("BUFG_GT", i_I=self.rxoutclk, o_O=self.cd_rtio_rx.clk),
+            AsyncResetSynchronizer(self.cd_rtio_rx, rx_reset_deglitched)
         ]
 
-        # tx data and prbs
-        self.submodules.tx_prbs = ClockDomainsRenamer("tx")(PRBSTX(dw, True))
-        self.comb += self.tx_prbs.config.eq(tx_prbs_config)
-        self.comb += [
-            self.tx_prbs.i.eq(Cat(*[self.encoder.output[i] for i in range(nwords)])),
-            If(tx_produce_square_wave,
-                # square wave @ linerate/20 for scope observation
-                txdata.eq((2**dw-1) & ~(2**(dw//2)-1))
-            ).Else(
-                txdata.eq(self.tx_prbs.o)
-            )
-        ]
-
-        # rx data and prbs
-        self.submodules.rx_prbs = ClockDomainsRenamer("rx")(PRBSRX(dw, True))
-        self.comb += [
-            self.rx_prbs.config.eq(rx_prbs_config),
-            rx_prbs_errors.eq(self.rx_prbs.errors)
-        ]
+        # tx data
+        self.comb += txdata.eq(Cat(*[encoder.output[i] for i in range(nwords)]))
+        
+        # rx data
         for i in range(nwords):
-            self.comb += self.decoders[i].input.eq(rxdata[10*i:10*(i+1)])
-        self.comb += self.rx_prbs.i.eq(rxdata)
+            self.comb += decoders[i].input.eq(rxdata[10*i:10*(i+1)])
 
         # clock alignment
-        if clock_aligner:
-            clock_aligner = BruteforceClockAligner(0b0101111100, self.tx_clk_freq)
-            self.submodules += clock_aligner
-            self.comb += [
-                clock_aligner.rxdata.eq(rxdata),
-                rx_init.restart.eq(clock_aligner.restart),
-                self.rx_ready.eq(clock_aligner.ready)
-            ]
-        else:
-            self.comb += self.rx_ready.eq(rx_init.done)
+        clock_aligner = BruteforceClockAligner(0b0101111100, self.rtio_clk_freq)
+        self.submodules += clock_aligner
+        self.comb += [
+            clock_aligner.rxdata.eq(rxdata),
+            rx_init.restart.eq(clock_aligner.restart),
+            self.rx_ready.eq(clock_aligner.ready)
+        ]
 
 
-class MultiGTH(Module, AutoCSR):
-    def __init__(self, plls, tx_pads, rx_pads, sys_clk_freq, dw=20, **kwargs):
-        self.nlanes = nlanes = len(tx_pads.p)
-
+class GTH(Module, TransceiverInterface):
+    def __init__(self, plls, tx_pads, rx_pads, sys_clk_freq, dw, master=0):
+        self.nchannels = nchannels = len(tx_pads)
         self.gths = []
-        self.encoders = []
-        self.decoders = []
-        self.rx_ready = Signal()
 
         # # #
 
         nwords = dw//10
 
-        class EncoderExposer:
-            def __init__(self):
-                self.k = Signal()
-                self.d = Signal(8)
-
-
-        def get_pads(pads, i):
-            class GTHPads:
-                def __init__(self, p, n):
-                    self.p = p
-                    self.n = n
-            return GTHPads(pads.p[i], pads.n[i])
-
-        rx_ready = Signal(reset=1)
-        for i in range(nlanes):
-            gth = GTH(plls[i], get_pads(tx_pads, i), get_pads(rx_pads, i), sys_clk_freq, dw=dw, **kwargs)
+        rtio_tx_clk = Signal()
+        channel_interfaces = []
+        for i in range(nchannels):
+            mode = "master" if i == master else "slave"
+            gth = GTHSingle(plls[i], tx_pads[i], rx_pads[i], sys_clk_freq, dw, mode)
+            if mode == "master":
+                self.comb += rtio_tx_clk.eq(gth.cd_rtio_tx.clk)
+            else:
+                self.comb += gth.cd_rtio_tx.clk.eq(rtio_tx_clk)
             self.gths.append(gth)
             setattr(self.submodules, "gth"+str(i), gth)
-            for j in range(nwords):
-                encoder = EncoderExposer()
-                self.encoders.append(encoder)
-                self.comb += [
-                    gth.encoder.k[j].eq(encoder.k),
-                    gth.encoder.d[j].eq(encoder.d)
-                ]
-                self.decoders.append(gth.decoders[j])
-            new_rx_ready = Signal()
-            self.comb += new_rx_ready.eq(rx_ready & gth.rx_ready)
-            rx_ready = new_rx_ready
+            channel_interface = ChannelInterface(gth.encoder, gth.decoders)
+            self.comb += channel_interface.rx_ready.eq(gth.rx_ready)
+            channel_interfaces.append(channel_interface)
 
-        self.comb += self.rx_ready.eq(rx_ready)
+        TransceiverInterface.__init__(self, channel_interfaces)
+
+        # rtio clock domain (clock from gth tx0, ored reset from all gth txs)
+        self.comb += self.cd_rtio.clk.eq(ClockSignal("gth0_rtio_tx"))
+        rtio_rst = Signal()
+        for i in range(nchannels):
+            rtio_rst.eq(rtio_rst | ResetSignal("gth" + str(i) + "rtio_tx"))
+            new_rtio_rst = Signal()
+            rtio_rst = new_rtio_rst
+        self.comb += self.cd_rtio.rst.eq(rtio_rst)
+
+        # rtio_rx clock domains
+        for i in range(nchannels):
+            self.comb += [
+                getattr(self, "cd_rtio_rx" + str(i)).clk.eq(self.gths[i].cd_rtio_rx.clk),
+                getattr(self, "cd_rtio_rx" + str(i)).rst.eq(self.gths[i].cd_rtio_rx.rst)
+            ]
