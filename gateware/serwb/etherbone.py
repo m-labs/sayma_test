@@ -15,10 +15,10 @@ from litex.gen import *
 from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
-from serwb.packet import *
+from gateware.serwb.packet import *
 
 
-class Packetizer(Module):
+class _Packetizer(Module):
     def __init__(self, sink_description, source_description, header):
         self.sink = sink = stream.Endpoint(sink_description)
         self.source = source = stream.Endpoint(source_description)
@@ -108,7 +108,7 @@ class Packetizer(Module):
         )
 
 
-class Depacketizer(Module):
+class _Depacketizer(Module):
     def __init__(self, sink_description, source_description, header):
         self.sink = sink = stream.Endpoint(sink_description)
         self.source = source = stream.Endpoint(source_description)
@@ -275,22 +275,22 @@ def etherbone_mmap_description(dw):
 
 # etherbone packet
 
-class EtherbonePacketPacketizer(Packetizer):
+class _EtherbonePacketPacketizer(_Packetizer):
     def __init__(self):
-        Packetizer.__init__(self,
+        _Packetizer.__init__(self,
             etherbone_packet_description(32),
             user_description(32),
             etherbone_packet_header)
 
 
-class EtherbonePacketTX(Module):
+class _EtherbonePacketTX(Module):
     def __init__(self):
         self.sink = sink = stream.Endpoint(etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(user_description(32))
 
         # # #
 
-        self.submodules.packetizer = packetizer = EtherbonePacketPacketizer()
+        self.submodules.packetizer = packetizer = _EtherbonePacketPacketizer()
         self.comb += [
             packetizer.sink.valid.eq(sink.valid),
             packetizer.sink.last.eq(sink.last),
@@ -321,22 +321,22 @@ class EtherbonePacketTX(Module):
         )
 
 
-class EtherbonePacketDepacketizer(Depacketizer):
+class _EtherbonePacketDepacketizer(_Depacketizer):
     def __init__(self):
-        Depacketizer.__init__(self,
+        _Depacketizer.__init__(self,
             user_description(32),
             etherbone_packet_description(32),
             etherbone_packet_header)
 
 
-class EtherbonePacketRX(Module):
+class _EtherbonePacketRX(Module):
     def __init__(self):
         self.sink = sink = stream.Endpoint(user_description(32))
         self.source = source = stream.Endpoint(etherbone_packet_user_description(32))
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = EtherbonePacketDepacketizer()
+        self.submodules.depacketizer = depacketizer = _EtherbonePacketDepacketizer()
         self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -385,10 +385,10 @@ class EtherbonePacketRX(Module):
         )
 
 
-class EtherbonePacket(Module):
+class _EtherbonePacket(Module):
     def __init__(self, port_sink, port_source):
-        self.submodules.tx = tx = EtherbonePacketTX()
-        self.submodules.rx = rx = EtherbonePacketRX()
+        self.submodules.tx = tx = _EtherbonePacketTX()
+        self.submodules.rx = rx = _EtherbonePacketRX()
         self.comb += [
             tx.source.connect(port_sink),
             port_source.connect(rx.sink)
@@ -397,23 +397,23 @@ class EtherbonePacket(Module):
 
 # etherbone record
 
-class EtherboneRecordPacketizer(Packetizer):
+class _EtherboneRecordPacketizer(_Packetizer):
     def __init__(self):
-        Packetizer.__init__(self,
+        _Packetizer.__init__(self,
             etherbone_record_description(32),
             etherbone_packet_user_description(32),
             etherbone_record_header)
 
 
-class EtherboneRecordDepacketizer(Depacketizer):
+class _EtherboneRecordDepacketizer(_Depacketizer):
     def __init__(self):
-        Depacketizer.__init__(self,
+        _Depacketizer.__init__(self,
             etherbone_packet_user_description(32),
             etherbone_record_description(32),
             etherbone_record_header)
 
 
-class EtherboneRecordReceiver(Module):
+class _EtherboneRecordReceiver(Module):
     def __init__(self, buffer_depth=256):
         self.sink = sink = stream.Endpoint(etherbone_record_description(32))
         self.source = source = stream.Endpoint(etherbone_mmap_description(32))
@@ -496,7 +496,7 @@ class EtherboneRecordReceiver(Module):
         )
 
 
-class EtherboneRecordSender(Module):
+class _EtherboneRecordSender(Module):
     def __init__(self, buffer_depth=256):
         self.sink = sink = stream.Endpoint(etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(etherbone_record_description(32))
@@ -546,7 +546,7 @@ class EtherboneRecordSender(Module):
         )
 
 
-class EtherboneRecord(Module):
+class _EtherboneRecord(Module):
     def __init__(self):
         self.sink = sink = stream.Endpoint(etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(etherbone_packet_user_description(32))
@@ -554,16 +554,16 @@ class EtherboneRecord(Module):
         # # #
 
         # receive record, decode it and generate mmap stream
-        self.submodules.depacketizer = depacketizer = EtherboneRecordDepacketizer()
-        self.submodules.receiver = receiver = EtherboneRecordReceiver()
+        self.submodules.depacketizer = depacketizer = _EtherboneRecordDepacketizer()
+        self.submodules.receiver = receiver = _EtherboneRecordReceiver()
         self.comb += [
             sink.connect(depacketizer.sink),
             depacketizer.source.connect(receiver.sink)
         ]
 
         # receive mmap stream, encode it and send records
-        self.submodules.sender = sender = EtherboneRecordSender()
-        self.submodules.packetizer = packetizer = EtherboneRecordPacketizer()
+        self.submodules.sender = sender = _EtherboneRecordSender()
+        self.submodules.packetizer = packetizer = _EtherboneRecordPacketizer()
         self.comb += [
             sender.source.connect(packetizer.sink),
             packetizer.source.connect(source),
@@ -575,7 +575,7 @@ class EtherboneRecord(Module):
 
 # etherbone wishbone
 
-class EtherboneWishboneMaster(Module):
+class _EtherboneWishboneMaster(Module):
     def __init__(self):
         self.sink = sink = stream.Endpoint(etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(etherbone_mmap_description(32))
@@ -643,9 +643,10 @@ class EtherboneWishboneMaster(Module):
         )
 
 
-class EtherboneWishboneSlave(Module):
+class _EtherboneWishboneSlave(Module):
     def __init__(self):
         self.bus = bus = wishbone.Interface()
+        self.ready = Signal(reset=1)
         self.sink = sink = stream.Endpoint(etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(etherbone_mmap_description(32))
 
@@ -655,47 +656,64 @@ class EtherboneWishboneSlave(Module):
         fsm.act("IDLE",
             sink.ready.eq(1),
             If(bus.stb & bus.cyc,
-                If(bus.we,
-                    NextState("SEND_WRITE")
+                If(self.ready,
+                    If(bus.we,
+                        NextState("SEND_WRITE")
+                    ).Else(
+                        NextState("SEND_READ")
+                    )
                 ).Else(
-                    NextState("SEND_READ")
+                    NextState("SEND_ERROR")
                 )
             )
         )
         fsm.act("SEND_WRITE",
-            source.valid.eq(1),
-            source.last.eq(1),
-            source.base_addr[2:].eq(bus.adr),
-            source.count.eq(1),
-            source.be.eq(bus.sel),
-            source.we.eq(1),
-            source.data.eq(bus.dat_w),
-            If(source.valid & source.ready,
-                bus.ack.eq(1),
-                NextState("IDLE")
+            If(~self.ready,
+                NextState("SEND_ERROR")
+            ).Else(
+                source.valid.eq(1),
+                source.last.eq(1),
+                source.base_addr[2:].eq(bus.adr),
+                source.count.eq(1),
+                source.be.eq(bus.sel),
+                source.we.eq(1),
+                source.data.eq(bus.dat_w),
+                If(source.valid & source.ready,
+                    bus.ack.eq(1),
+                    NextState("IDLE")
+                )
             )
         )
         fsm.act("SEND_READ",
-            source.valid.eq(1),
-            source.last.eq(1),
-            source.base_addr.eq(0),
-            source.count.eq(1),
-            source.be.eq(bus.sel),
-            source.we.eq(0),
-            source.data[2:].eq(bus.adr),
-            If(source.valid & source.ready,
-                NextState("WAIT_READ")
+            If(~self.ready,
+                NextState("SEND_ERROR")
+            ).Else(
+                source.valid.eq(1),
+                source.last.eq(1),
+                source.base_addr.eq(0),
+                source.count.eq(1),
+                source.be.eq(bus.sel),
+                source.we.eq(0),
+                source.data[2:].eq(bus.adr),
+                If(source.valid & source.last,
+                    NextState("WAIT_READ")
+                )
             )
         )
         fsm.act("WAIT_READ",
             sink.ready.eq(1),
-            If(sink.valid & sink.we,
+            If(~self.ready,
+                NextState("SEND_ERROR")
+            ).Elif(sink.valid & sink.we,
                 bus.ack.eq(1),
                 bus.dat_r.eq(sink.data),
                 NextState("IDLE")
             )
         )
-
+        fsm.act("SEND_ERROR",
+            bus.ack.eq(1),
+            bus.err.eq(1)
+        )
 
 # etherbone
 
@@ -706,12 +724,12 @@ class Etherbone(Module):
 
         # # #
 
-        self.submodules.packet = EtherbonePacket(source, sink)
-        self.submodules.record = EtherboneRecord()
+        self.submodules.packet = _EtherbonePacket(source, sink)
+        self.submodules.record = _EtherboneRecord()
         if mode == "master":
-            self.submodules.wishbone = EtherboneWishboneMaster()
+            self.submodules.wishbone = _EtherboneWishboneMaster()
         elif mode == "slave":
-            self.submodules.wishbone = EtherboneWishboneSlave()
+            self.submodules.wishbone = _EtherboneWishboneSlave()
         else:
             raise ValueError
 

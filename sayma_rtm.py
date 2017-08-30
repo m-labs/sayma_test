@@ -17,10 +17,8 @@ from litex.soc.cores.gpio import GPIOOut
 from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
-from serwb.s7phy import S7SerdesPLL, S7Serdes
-from serwb.phy import SerdesSlaveInit, SerdesControl
-from serwb import packet
-from serwb import etherbone
+from serwb.phy import SERWBPLL, SERWBPHY
+from serwb.core import SERWBCore
 
 from litescope import LiteScopeAnalyzer
 
@@ -257,8 +255,8 @@ class JESDTestSoC(SoCCore):
 
 class SERWBTestSoC(SoCCore):
     csr_map = {
-        "serwb_control": 20,
-        "analyzer":             30
+        "serwb_phy": 20,
+        "analyzer":  30
     }
     csr_map.update(SoCCore.csr_map)
 
@@ -287,58 +285,29 @@ class SERWBTestSoC(SoCCore):
         platform.add_period_constraint(self.crg.cd_sys.clk, 8.0)
 
         # amc rtm link
-        serwb_pll = S7SerdesPLL(125e6, 1.25e9, vco_div=1)
+        serwb_pll = SERWBPLL(125e6, 1.25e9, vco_div=1)
         self.submodules += serwb_pll
 
-        serwb_pads = platform.request("serwb")
-        serwb_serdes = S7Serdes(serwb_pll, serwb_pads, mode="slave")
-        self.submodules.serwb_serdes = serwb_serdes
-        serwb_init =  SerdesSlaveInit(serwb_serdes, taps=32)
-        self.submodules.serwb_init = serwb_init
-        self.submodules.serwb_control = SerdesControl(serwb_init, mode="slave")
-        self.comb += self.crg.reset.eq(serwb_init.reset)
+        serwb_phy = SERWBPHY(platform.device, serwb_pll, platform.request("serwb"), mode="slave")
+        self.submodules.serwb_phy = serwb_phy
+        self.comb += self.crg.reset.eq(serwb_phy.init.reset)
 
-        serwb_serdes.cd_serdes.clk.attr.add("keep")
-        serwb_serdes.cd_serdes_20x.clk.attr.add("keep")
-        serwb_serdes.cd_serdes_5x.clk.attr.add("keep")
-        platform.add_period_constraint(serwb_serdes.cd_serdes.clk, 32.0),
-        platform.add_period_constraint(serwb_serdes.cd_serdes_20x.clk, 1.6),
-        platform.add_period_constraint(serwb_serdes.cd_serdes_5x.clk, 6.4)
+        serwb_phy.serdes.cd_serwb_serdes.clk.attr.add("keep")
+        serwb_phy.serdes.cd_serwb_serdes_20x.clk.attr.add("keep")
+        serwb_phy.serdes.cd_serwb_serdes_5x.clk.attr.add("keep")
+        platform.add_period_constraint(serwb_phy.serdes.cd_serwb_serdes.clk, 32.0),
+        platform.add_period_constraint(serwb_phy.serdes.cd_serwb_serdes_20x.clk, 1.6),
+        platform.add_period_constraint(serwb_phy.serdes.cd_serwb_serdes_5x.clk, 6.4)
         self.platform.add_false_path_constraints(
             self.crg.cd_sys.clk,
-            serwb_serdes.cd_serdes.clk,
-            serwb_serdes.cd_serdes_5x.clk)
+            serwb_phy.serdes.cd_serwb_serdes.clk,
+            serwb_phy.serdes.cd_serwb_serdes_5x.clk)
+
 
         # wishbone master
-        serwb_depacketizer = packet.Depacketizer(clk_freq)
-        serwb_packetizer = packet.Packetizer()
-        self.submodules += serwb_depacketizer, serwb_packetizer
-        serwb_etherbone = etherbone.Etherbone(mode="master")
-        self.submodules += serwb_etherbone
-        serwb_tx_cdc = stream.AsyncFIFO([("data", 32)], 8)
-        serwb_tx_cdc = ClockDomainsRenamer({"write": "sys", "read": "serdes"})(serwb_tx_cdc)
-        self.submodules += serwb_tx_cdc
-        serwb_rx_cdc = stream.AsyncFIFO([("data", 32)], 8)
-        serwb_rx_cdc = ClockDomainsRenamer({"write": "serdes", "read": "sys"})(serwb_rx_cdc)
-        self.submodules += serwb_rx_cdc
-        self.comb += [
-            # core <--> etherbone
-            serwb_depacketizer.source.connect(serwb_etherbone.sink),
-            serwb_etherbone.source.connect(serwb_packetizer.sink),
-
-            # core --> serdes
-            serwb_packetizer.source.connect(serwb_tx_cdc.sink),
-            If(serwb_tx_cdc.source.valid & serwb_init.ready,
-                serwb_serdes.tx_data.eq(serwb_tx_cdc.source.data)
-            ),
-            serwb_tx_cdc.source.ready.eq(serwb_init.ready),
-
-            # serdes --> core
-            serwb_rx_cdc.sink.valid.eq(serwb_init.ready),
-            serwb_rx_cdc.sink.data.eq(serwb_serdes.rx_data),
-            serwb_rx_cdc.source.connect(serwb_depacketizer.sink),
-        ]
-        self.add_wb_master(serwb_etherbone.wishbone.bus)
+        serwb_core = SERWBCore(serwb_phy, clk_freq, mode="master")
+        self.submodules += serwb_core
+        self.add_wb_master(serwb_core.etherbone.wishbone.bus)
 
         # wishbone test memory
         self.submodules.serwb_sram = wishbone.SRAM(8192, init=[i for i in range(8192//4)])
@@ -347,48 +316,48 @@ class SERWBTestSoC(SoCCore):
         # analyzer
         if with_analyzer:
             wishbone_access = Signal()
-            self.comb += wishbone_access.eq((serwb_serdes.decoders[0].d == 0xa5) |
-                                            (serwb_serdes.decoders[1].d == 0x5a))
+            self.comb += wishbone_access.eq((serwb_phy.serdes.decoders[0].d == 0xa5) |
+                                            (serwb_phy.serdes.decoders[1].d == 0x5a))
             init_group = [
                 wishbone_access,
-                serwb_init.ready,
-                serwb_init.delay,
-                serwb_init.bitslip_found,
-                serwb_init.bitslip,
-                serwb_init.delay_found,
-                serwb_init.delay,
+                serwb_phy.init.ready,
+                serwb_phy.init.error,
+                serwb_phy.init.delay_min,
+                serwb_phy.init.delay_max,
+                serwb_phy.init.delay,
+                serwb_phy.init.bitslip
             ]
             serdes_group = [
                 wishbone_access,
-                serwb_serdes.encoder.k[0],
-                serwb_serdes.encoder.d[0],
-                serwb_serdes.encoder.k[1],
-                serwb_serdes.encoder.d[1],
-                serwb_serdes.encoder.k[2],
-                serwb_serdes.encoder.d[2],
-                serwb_serdes.encoder.k[3],
-                serwb_serdes.encoder.d[3],
+                serwb_phy.serdes.encoder.k[0],
+                serwb_phy.serdes.encoder.d[0],
+                serwb_phy.serdes.encoder.k[1],
+                serwb_phy.serdes.encoder.d[1],
+                serwb_phy.serdes.encoder.k[2],
+                serwb_phy.serdes.encoder.d[2],
+                serwb_phy.serdes.encoder.k[3],
+                serwb_phy.serdes.encoder.d[3],
 
-                serwb_serdes.decoders[0].d,
-                serwb_serdes.decoders[0].k,
-                serwb_serdes.decoders[1].d,
-                serwb_serdes.decoders[1].k,
-                serwb_serdes.decoders[2].d,
-                serwb_serdes.decoders[2].k,
-                serwb_serdes.decoders[3].d,
-                serwb_serdes.decoders[3].k,
+                serwb_phy.serdes.decoders[0].d,
+                serwb_phy.serdes.decoders[0].k,
+                serwb_phy.serdes.decoders[1].d,
+                serwb_phy.serdes.decoders[1].k,
+                serwb_phy.serdes.decoders[2].d,
+                serwb_phy.serdes.decoders[2].k,
+                serwb_phy.serdes.decoders[3].d,
+                serwb_phy.serdes.decoders[3].k,
             ]
             etherbone_source_group = [
                 wishbone_access,
-                serwb_etherbone.wishbone.source
+                serwb_core.etherbone.wishbone.source
             ]
             etherbone_sink_group = [
                 wishbone_access,
-                serwb_etherbone.wishbone.sink
+                serwb_core.etherbone.wishbone.sink
             ]
             wishbone_group = [
                 wishbone_access,
-                serwb_etherbone.wishbone.bus
+                serwb_core.etherbone.wishbone.bus
             ]
             analyzer_signals = {
                 0 : init_group,
