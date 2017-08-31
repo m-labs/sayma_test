@@ -6,12 +6,14 @@ from litex.soc.tools.remote import RemoteClient
 
 from libbase.hmc import *
 
-from clocking_config import hmc830_config, hmc7043_config_5gbps, hmc7043_config_10gbps
+from clocking_config import *
 
 if len(sys.argv) < 2:
-    print("missing config (5gbps or 10gbps)")
+    print("missing config (2p5gbps, 5gbps or 10gbps)")
     exit()
-if sys.argv[1] == "5gbps":
+if sys.argv[1] == "2p5gbps":
+	hmc7043_config = hm7043_config_2p5gbps
+elif sys.argv[1] == "5gbps":
 	hmc7043_config = hmc7043_config_5gbps
 elif sys.argv[1] == "10gbps":
 	hmc7043_config = hmc7043_config_10gbps
