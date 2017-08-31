@@ -31,7 +31,7 @@ def main():
         print("missing sayma board (clkgen, sayma_amc, sayma_rtm or sayma)")
         exit()
     if sys.argv[1] == "clkgen":
-    	load_clkgen()
+        load_clkgen()
     elif sys.argv[1] == "sayma_amc":
         load_sayma_amc()
     elif sys.argv[1] == "sayma_rtm":

@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
+import sys
+
 
 from litex.soc.tools.remote import RemoteClient
 
 from libbase.hmc import *
 
 from clocking_config import hmc830_config, hmc7043_config_5gbps, hmc7043_config_10gbps
+
+if len(sys.argv) < 2:
+    print("missing config (5gbps or 10gbps)")
+    exit()
+if sys.argv[1] == "5gbps":
+	hmc7043_config = hmc7043_config_5gbps
+elif sys.argv[1] == "10gbps":
+	hmc7043_config = hmc7043_config_10gbps
+else:
+    raise ValueError
 
 wb_amc = RemoteClient(port=1234, csr_csv="../sayma_amc/csr.csv", debug=False)
 wb_rtm = RemoteClient(port=1235, csr_csv="../sayma_rtm/csr.csv", debug=False)
@@ -23,7 +35,7 @@ for addr, data in hmc830_config:
     hmc830.write(addr, data)
 
 # configure hmc7043
-for addr, data in hmc7043_config_5gbps:
+for addr, data in hmc7043_config:
     hmc7043.write(addr, data)
 
 # # #
