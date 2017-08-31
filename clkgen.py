@@ -2,7 +2,7 @@
 import sys
 
 from litex.gen import *
-from litex.boards.platforms import kc705
+from litex.boards.platforms import kcu105
 
 from litex.gen.genlib.io import CRG
 
@@ -13,15 +13,15 @@ from litex.soc.cores.uart import UARTWishboneBridge
 
 class ClkGenSoC(SoCCore):
     def __init__(self, platform):
-        clk_freq = int(200e9)
+        clk_freq = int(125e9)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
             csr_data_width=32,
             with_uart=False,
-            ident="KC705 100MHz Clock Generator",
+            ident="KCU105 1GHz Clock Generator",
             with_timer=False
         )
-        self.submodules.crg = CRG(platform.request("clk200"))
+        self.submodules.crg = CRG(platform.request("clk125"))
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"),
                                                   clk_freq, baudrate=115200))
         self.add_wb_master(self.cpu_or_bridge.wishbone)
@@ -35,7 +35,7 @@ class ClkGenSoC(SoCCore):
 
                      # VCO @ 1GHz
                      p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=5.0,
-                     p_CLKFBOUT_MULT=5, p_DIVCLK_DIVIDE=1,
+                     p_CLKFBOUT_MULT=8, p_DIVCLK_DIVIDE=1,
                      i_CLKIN1=ClockSignal(), i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
 
                      # 1GHz
@@ -55,7 +55,7 @@ class ClkGenSoC(SoCCore):
 
 
 def main():
-    soc = ClkGenSoC(kc705.Platform())
+    soc = ClkGenSoC(kcu105.Platform())
     builder = Builder(soc, output_dir="build_clkgen")
     builder.build()
 

@@ -8,13 +8,13 @@ from litex.build.xilinx import VivadoProgrammer
 def load_clkgen():
     prog = VivadoProgrammer()
     prog.load_bitstream(
-        bitstream_file="build_clkgen/gateware/top.bit",
-        target="localhost:3121/xilinx_tcf/Digilent/210203336949A")
+        bitstream_file="build_clkgen/gateware/top.bit")
 
 
 def load_sayma_amc():
     prog = VivadoProgrammer()
     prog.load_bitstream(
+        
         bitstream_file="build_sayma_amc/gateware/top.bit",
         device=0)
 
