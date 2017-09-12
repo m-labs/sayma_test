@@ -422,8 +422,10 @@ def get_phy_pads(jesd_pads, n):
 class JESDTestSoC(SoCCore):
     csr_map = {
         "dac0_control": 20,
-        "dac1_control": 21,
-        "analyzer": 30
+        "dac0_core":    21,
+        "dac1_control": 22,
+        "dac1_core":    23,        
+        "analyzer":     30
     }
     csr_map.update(SoCCore.csr_map)
 

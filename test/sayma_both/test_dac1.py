@@ -19,6 +19,14 @@ ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
 ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
 jesd_settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
 
+# configure tx electrical settings
+for i in range(8):
+    txdiffctrl = getattr(wb_amc.regs, "dac1_core_phy{:d}_transmitter_txdiffcttrl".format(i))
+    txprecursor = getattr(wb_amc.regs, "dac1_core_phy{:d}_transmitter_txprecursor".format(i))
+    txpostcursor = getattr(wb_amc.regs, "dac1_core_phy{:d}_transmitter_txpostcursor".format(i))
+    txdiffctrl.write(0b1100)
+    txprecursor.write(0b00000)
+    txpostcursor.write(0b00000)
 
 # release/reset jesd core
 wb_amc.regs.dac1_control_prbs_config.write(0)
