@@ -25,8 +25,24 @@ for i in range(8):
     txprecursor = getattr(wb_amc.regs, "dac1_core_phy{:d}_transmitter_txprecursor".format(i))
     txpostcursor = getattr(wb_amc.regs, "dac1_core_phy{:d}_transmitter_txpostcursor".format(i))
     txdiffctrl.write(0b1100)
-    txprecursor.write(0b00000)
-    txpostcursor.write(0b00000)
+    txprecursor.write(0b000000)
+    txpostcursor.write(0b000000)
+
+# reset dacs
+wb_rtm.regs.dac_reset_out.write(0)
+time.sleep(1)
+wb_rtm.regs.dac_reset_out.write(1)
+
+time.sleep(1)
+
+# configure dac1
+dac1 = AD9154(wb_rtm.regs, 1)
+dac1.reset()
+print("dac1 configuration")
+print("dac1 present: {:s}".format(str(dac1.check_presence())))
+dac1.startup(jesd_settings, linerate=5e9)
+# show dac1 status
+dac1.print_status()
 
 # release/reset jesd core
 wb_amc.regs.dac1_control_prbs_config.write(0)
@@ -34,17 +50,9 @@ wb_amc.regs.dac1_control_enable.write(0)
 time.sleep(1)
 wb_amc.regs.dac1_control_enable.write(1)
 
-# configure dac1
-wb_rtm.regs.dac_reset_out.write(0)
-wb_rtm.regs.dac_reset_out.write(1)
-dac1 = AD9154(wb_rtm.regs, 1)
-dac1.reset()
-print("dac1 configuration")
-print("dac1 present: {:s}".format(str(dac1.check_presence())))
-dac1.startup(jesd_settings, linerate=5e9)
-
-# show dac1 status
 time.sleep(1)
+
+# show dac0 status
 dac1.print_status()
 
 # prbs test
