@@ -199,13 +199,19 @@ class AD9154(AD9154SPI):
         self.write(AD9154_TERM_BLK2_CTRLREG0, 0x01)
         self.write(AD9154_SERDES_SPI_REG, 0x01)
         self.write(AD9154_CDR_OPERATING_MODE_REG_0,
-            AD9154_CDR_OVERSAMP_SET(0) |
+            AD9154_CDR_OVERSAMP_SET(linerate <= 2.5e9) |
             AD9154_CDR_RESERVED_SET(2) |
-            AD9154_ENHALFRATE_SET(linerate > 5.65e9))
+            AD9154_ENHALFRATE_SET(linerate >= 5.65e9))
         self.write(AD9154_CDR_RESET, 0)
         self.write(AD9154_CDR_RESET, 1)
+        if (linerate <= 2.5e9):
+            cdr_oversamp = 2
+        elif (linerate > 2.5e9) and (linerate <= 5.65e9):
+            cdr_oversamp = 1
+        else:
+            cdr_oversamp = 0
         self.write(AD9154_REF_CLK_DIVIDER_LDO,
-            AD9154_SPI_CDR_OVERSAMP_SET(linerate < 5.65e9) |
+            AD9154_SPI_CDR_OVERSAMP_SET(cdr_oversamp) |
             AD9154_SPI_LDO_BYPASS_FILT_SET(1) |
             AD9154_SPI_LDO_REF_SEL_SET(0))
         self.write(AD9154_LDO_FILTER_1, 0x62) # magic
