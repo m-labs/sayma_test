@@ -460,7 +460,7 @@ class JESDTestSoC(SoCCore):
         ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
         ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
         settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
-        linerate = 2.5e9
+        linerate = 5e9
         refclk_freq = 125e6
 
         self.clock_domains.cd_jesd = ClockDomain()
@@ -481,15 +481,14 @@ class JESDTestSoC(SoCCore):
             jesd_pads = platform.request("dac_jesd", dac)
             phys = []
             for i in range(len(jesd_pads.txp)):
-                if True:
-                    qpll = JESD204BGTHChannelPLL(self.refclk, refclk_freq, linerate)
+                if i%4 == 0:
+                    qpll = JESD204BGTHQuadPLL(self.refclk, refclk_freq, linerate)
                     self.submodules += qpll
                     print(qpll)
 
                 phy = LiteJESD204BPhyTX(
                     qpll, get_phy_pads(jesd_pads, i), self.clk_freq,
                     transceiver="gth")
-                #self.comb += phy.transmitter.produce_square_wave.eq(1)
                 platform.add_period_constraint(phy.transmitter.cd_tx.clk, 40*1e9/linerate)
                 platform.add_false_path_constraints(
                     self.crg.cd_sys.clk,

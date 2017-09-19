@@ -19,14 +19,19 @@ ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
 ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
 jesd_settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
 
+
 # configure tx electrical settings
 for i in range(8):
+    produce_square_wave = getattr(wb_amc.regs, "dac0_core_phy{:d}_transmitter_produce_square_wave".format(i))
     txdiffctrl = getattr(wb_amc.regs, "dac0_core_phy{:d}_transmitter_txdiffcttrl".format(i))
+    txmaincursor = getattr(wb_amc.regs, "dac0_core_phy{:d}_transmitter_txmaincursor".format(i))
     txprecursor = getattr(wb_amc.regs, "dac0_core_phy{:d}_transmitter_txprecursor".format(i))
     txpostcursor = getattr(wb_amc.regs, "dac0_core_phy{:d}_transmitter_txpostcursor".format(i))
-    txdiffctrl.write(0b1100)
-    txprecursor.write(0b00000)
-    txpostcursor.write(0b00000)
+    produce_square_wave.write(0) # 1 to generate clock on lane with frequency of linerate/40
+    txdiffctrl.write(0b1111) # cf ug576
+    txmaincursor.write(80) # cf ug576
+    txprecursor.write(0b000000) # cf ug576
+    txpostcursor.write(0b000000) # cf ug576
 
 # reset dacs
 wb_rtm.regs.dac_reset_out.write(0)
