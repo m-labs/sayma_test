@@ -476,8 +476,8 @@ dut.write(0x116, 0x13)
 # clkgrp5_div1_cfg1_hi_perf[7:7] = 0x0
 dut.write(0x118, 0x73)
 
-# clkgrp5_div1_cfg12_divrat_lsb[7:0] = 0x8
-dut.write(0x119, 0x8)
+# clkgrp5_div1_cfg12_divrat_lsb[7:0] = 0x4
+dut.write(0x119, 0x4)
 
 # clkgrp5_div1_cfg12_divrat_msb[3:0] = 0x0
 dut.write(0x11A, 0x0)
@@ -552,8 +552,8 @@ dut.write(0x12A, 0xB)
 # clkgrp6_div1_cfg1_hi_perf[7:7] = 0x0
 dut.write(0x12C, 0x73)
 
-# clkgrp6_div1_cfg12_divrat_lsb[7:0] = 0x8
-dut.write(0x12D, 0x8)
+# clkgrp6_div1_cfg12_divrat_lsb[7:0] = 0x4
+dut.write(0x12D, 0x4)
 
 # clkgrp6_div1_cfg12_divrat_msb[3:0] = 0x0
 dut.write(0x12E, 0x0)

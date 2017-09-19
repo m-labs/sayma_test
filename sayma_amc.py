@@ -22,6 +22,7 @@ from litedram.frontend.bist import LiteDRAMBISTChecker
 
 from litejesd204b.common import *
 from litejesd204b.phy.gth import GTHQuadPLL as JESD204BGTHQuadPLL
+from litejesd204b.phy.gth import GTHChannelPLL as JESD204BGTHChannelPLL
 from litejesd204b.phy import LiteJESD204BPhyTX
 from litejesd204b.core import LiteJESD204BCoreTX
 from litejesd204b.core import LiteJESD204BCoreTXControl
@@ -459,7 +460,7 @@ class JESDTestSoC(SoCCore):
         ps = JESD204BPhysicalSettings(l=8, m=4, n=16, np=16)
         ts = JESD204BTransportSettings(f=2, s=2, k=16, cs=0)
         settings = JESD204BSettings(ps, ts, did=0x5a, bid=0x5)
-        linerate = 5e9
+        linerate = 2.5e9
         refclk_freq = 125e6
 
         self.clock_domains.cd_jesd = ClockDomain()
@@ -480,8 +481,8 @@ class JESDTestSoC(SoCCore):
             jesd_pads = platform.request("dac_jesd", dac)
             phys = []
             for i in range(len(jesd_pads.txp)):
-                if i%4 == 0:
-                    qpll = JESD204BGTHQuadPLL(self.refclk, refclk_freq, linerate)
+                if True:
+                    qpll = JESD204BGTHChannelPLL(self.refclk, refclk_freq, linerate)
                     self.submodules += qpll
                     print(qpll)
 
