@@ -45,14 +45,13 @@ dac1 = AD9154(wb_rtm.regs, 1)
 dac1.reset()
 print("dac1 configuration")
 print("dac1 present: {:s}".format(str(dac1.check_presence())))
-dac1.startup(jesd_settings, linerate=5e9)
+dac1.startup(jesd_settings, linerate=10e9)
 # show dac1 status
 dac1.print_status()
 
 # release/reset jesd core
 wb_amc.regs.dac1_control_prbs_config.write(0)
 wb_amc.regs.dac1_control_enable.write(0)
-time.sleep(1)
 wb_amc.regs.dac1_control_enable.write(1)
 
 time.sleep(1)
