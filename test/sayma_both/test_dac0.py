@@ -30,8 +30,8 @@ for i in range(8):
     produce_square_wave.write(0) # 1 to generate clock on lane with frequency of linerate/40
     txdiffctrl.write(0b1111) # cf ug576
     txmaincursor.write(80) # cf ug576
-    txprecursor.write(0b000000) # cf ug576
-    txpostcursor.write(0b000000) # cf ug576
+    txprecursor.write(0b00000) # cf ug576
+    txpostcursor.write(0b00000) # cf ug576
 
 # reset dacs
 wb_rtm.regs.dac_reset_out.write(0)
