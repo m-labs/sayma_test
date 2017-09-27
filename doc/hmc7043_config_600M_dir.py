@@ -39,10 +39,10 @@ dut.write(0xB, 0xF)
 # glbl_cfg5_gpi1_sel[4:1] = 0x0
 dut.write(0x46, 0x0)
 
-# glbl_cfg8_gpo1_en[0:0] = 0x1
+# glbl_cfg8_gpo1_en[0:0] = 0x0
 # glbl_cfg8_gpo1_mode[1:1] = 0x1
 # glbl_cfg8_gpo1_sel[7:2] = 0x7
-dut.write(0x50, 0x1F)
+dut.write(0x50, 0x1E)
 
 # glbl_cfg2_sdio_en[0:0] = 0x1
 # glbl_cfg2_sdio_mode[1:1] = 0x1
@@ -190,9 +190,9 @@ dut.write(0xCD, 0x0)
 # clkgrp1_div1_cfg12_mslip_msb[3:0] = 0x0
 dut.write(0xCE, 0x0)
 
-# clkgrp1_div1_cfg2_sel_outmux[1:0] = 0x3
+# clkgrp1_div1_cfg2_sel_outmux[1:0] = 0x0
 # clkgrp1_div1_cfg1_drvr_sel_testclk[2:2] = 0x0
-dut.write(0xCF, 0x3)
+dut.write(0xCF, 0x0)
 
 # clkgrp1_div1_cfg5_drvr_res[1:0] = 0x0
 # clkgrp1_div1_cfg5_drvr_spare[2:2] = 0x0
